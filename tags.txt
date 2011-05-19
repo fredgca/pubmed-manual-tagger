@@ -1,0 +1,9 @@
+MESH, yellow
+GO, yellow
+UniProt, lightblue
+UniGene, lightblue
+PDB, lightblue
+PubChem, lightblue
+Organism, green
+Tissue, green
+Cell, green
