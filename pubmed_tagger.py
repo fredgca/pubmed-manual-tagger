@@ -232,6 +232,7 @@ class PubMed_Tagger:
         if it is true and is a openning tag, get its name and translate to xml format
         elif it is true and is a closing tag, translate to a closing tag in a xml format
         return the new textbuffer, and the current (or not) closing tag
+        **deprecated**
         """
         current_tags = []
         textMark_iter = textbuffer.get_iter_at_mark(textMark)
@@ -259,27 +260,53 @@ class PubMed_Tagger:
             self._message_window.show()
             return
 
-        textMark = textbuffer.create_mark(None, start, False)
-        opening_tag = False
-        textbuffer,opening_tag = self.write_tag_on_textbuffer(textbuffer, textMark, opening_tag)
-        updatedIter = textbuffer.get_iter_at_mark(textMark)
-        has_other_tag = updatedIter.forward_to_tag_toggle(None)
+        #opening_tag = True
+        Abstract = etree.Element("Abstract")
+        AbstractText = etree.SubElement(Abstract, "AbstractText")
+        next_tag_iter = start.copy()
+        has_other_tag = next_tag_iter.forward_to_tag_toggle(None)
+        children_tags = []
+        if not start.begins_tag() and has_other_tag:
+            AbstractText.text = textbuffer.get_text(start,next_tag_iter)
+        elif not start.begins_tag() and not has_other_tag:
+            AbstractText.text = textbuffer.get_text(start,end)
+
+        start = next_tag_iter.copy()
         while has_other_tag:
-            textMark = textbuffer.create_mark(None, updatedIter, False)
-            textbuffer, opening_tag = self.write_tag_on_textbuffer(\
-                                      textbuffer, textMark, opening_tag)
+            print "\nWhile again"
+            tags = start.get_tags()
+            tag = tags[0].get_property("name").split("Annotation")
+            tag_name = tag[0].strip()
+            tag_attribute = tag[1].split("=")[1].strip()
+            next_tag_iter = start.copy()
+            next_tag_iter.forward_to_tag_toggle(None)
+            tail_tag_iter = next_tag_iter.copy()
+            has_other_tag = tail_tag_iter.forward_to_tag_toggle(None)
+            print "start", start.begins_tag(), start.ends_tag(),tag_attribute #start.get_tags()[0].get_property("name")
+            print "next", next_tag_iter.begins_tag(), next_tag_iter.ends_tag(),tag_attribute #next_tag_iter.get_tags()[0].get_property("name")
+            print "tail", tail_tag_iter.begins_tag(), tail_tag_iter.ends_tag(),tag_attribute #tail_tag_iter.get_tags()[0].get_property("name")
 
-            updatedIter = textbuffer.get_iter_at_mark(textMark)
-            has_other_tag = updatedIter.forward_to_tag_toggle(None)
+            if has_other_tag:
+                print "tem outra tag"
+                children_tags.append(etree.SubElement(AbstractText, tag_name,
+                                     attrib = {"Annotation": tag_attribute}))
+                children_tags[-1].text = textbuffer.get_text(start, next_tag_iter)
+                children_tags[-1].tail = textbuffer.get_text(next_tag_iter, tail_tag_iter)
 
-        start,end = textbuffer.get_bounds()
-        annotated_abstract = textbuffer.get_text(start, end, include_hidden_chars=False)
-        annotated_abstract = "<Abstract><AbstractText>"+annotated_abstract+"</AbstractText></Abstract>"
-        print annotated_abstract
-        xml_annotated_abstract = etree.fromstring(annotated_abstract)
+
+            else:
+                print "nao tem outra tag"
+                children_tags.append(etree.SubElement(AbstractText, tag_name,
+                                     attrib = {"Annotation": tag_attribute}))
+                children_tags[-1].text = textbuffer.get_text(start, next_tag_iter)
+                children_tags[-1].tail = textbuffer.get_text(next_tag_iter, textbuffer.get_end_iter())
+
+            start = tail_tag_iter.copy()
+
+           
         filename = self.current_open_file #".xml"
         abstract_xml = etree.parse(filename)
-        self.replace_etree_element(abstract_xml.findall(".//Abstract")[0], xml_annotated_abstract)
+        self.replace_etree_element(abstract_xml.findall(".//Abstract")[0], Abstract)
         abstract_xml.write(filename)
 
     def on_annotation_button_clicked(self, *args):
@@ -397,18 +424,6 @@ class PubMed_Tagger:
 
         self._tags_combo.set_active(0)
 
-    def text2xml(self,text):
-        for char in self.text2xml_conversion.keys():
-            text.replace(char, self.text2xml_conversion[char])
-          
-        return text
-
-    def xml2text(self,xml):
-        for char in self.xml2text_conversion.keys():
-            xml.replace(char, self.xml2text_conversion[char])
-          
-        return xml
-
     ### Constructor ###
     def __init__ (self):
         """Pubmed Tagger is an app to make text annotation easier"""
@@ -442,13 +457,6 @@ class PubMed_Tagger:
         self._pmid_entry.set_text("Type a valid PMID to download")
         self.load_tags()
         self.active_term_bounds = ()
-        self.text2xml_conversion = {"<": "&lt", 
-                                    ">": "&gt",
-                                    "&": "&amp",
-                                    "'": "&apos",
-                                    "\"": "&quot"}
-        self.xml2text_conversion = {}
-        for key,value in self.text2xml_conversion.items(): self.xml2text_conversion[value] = key
 
 if __name__ == "__main__":              
     PubMed_Tagger()
