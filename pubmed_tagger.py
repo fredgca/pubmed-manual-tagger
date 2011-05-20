@@ -282,12 +282,12 @@ class PubMed_Tagger:
             next_tag_iter.forward_to_tag_toggle(None)
             tail_tag_iter = next_tag_iter.copy()
             has_other_tag = tail_tag_iter.forward_to_tag_toggle(None)
-            print "start", start.begins_tag(), start.ends_tag(),tag_attribute #start.get_tags()[0].get_property("name")
-            print "next", next_tag_iter.begins_tag(), next_tag_iter.ends_tag(),tag_attribute #next_tag_iter.get_tags()[0].get_property("name")
-            print "tail", tail_tag_iter.begins_tag(), tail_tag_iter.ends_tag(),tag_attribute #tail_tag_iter.get_tags()[0].get_property("name")
+            #print "start", start.begins_tag(), start.ends_tag(),tag_attribute #start.get_tags()[0].get_property("name")
+            #print "next", next_tag_iter.begins_tag(), next_tag_iter.ends_tag(),tag_attribute #next_tag_iter.get_tags()[0].get_property("name")
+            #print "tail", tail_tag_iter.begins_tag(), tail_tag_iter.ends_tag(),tag_attribute #tail_tag_iter.get_tags()[0].get_property("name")
 
             if has_other_tag:
-                print "tem outra tag"
+                #print "tem outra tag"
                 children_tags.append(etree.SubElement(AbstractText, tag_name,
                                      attrib = {"Annotation": tag_attribute}))
                 children_tags[-1].text = textbuffer.get_text(start, next_tag_iter)
@@ -295,7 +295,7 @@ class PubMed_Tagger:
 
 
             else:
-                print "nao tem outra tag"
+                #print "nao tem outra tag"
                 children_tags.append(etree.SubElement(AbstractText, tag_name,
                                      attrib = {"Annotation": tag_attribute}))
                 children_tags[-1].text = textbuffer.get_text(start, next_tag_iter)
