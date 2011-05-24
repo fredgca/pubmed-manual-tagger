@@ -84,20 +84,18 @@ class PubMed_Tagger:
 
         tags_found = 0
         for annotated_abstract in annotated_abstract_list:
-            textbuffer.insert(textbuffer.get_end_iter(), " ")
+            if annotated_abstract_list.index(annotated_abstract) != 0:
+                textbuffer.insert(textbuffer.get_end_iter(), " ")
+
             if annotated_abstract.text:
                 if not annotated_abstract.text.isspace(): 
                     textbuffer.insert(textbuffer.get_end_iter(),\
                                       annotated_abstract.text)
-                    #print "text: ", annotated_abstract.text,
-                    #print len(annotated_abstract.text)
 
             if annotated_abstract.tail:
                 if not annotated_abstract.tail.isspace():
                     textbuffer.insert(textbuffer.get_end_iter(),\
                                       annotated_abstract.tail)
-                    #print "tail: ", annotated_abstract.tail,
-                    #print len(annotated_abstract.tail)
 
             tags_found += len(list(annotated_abstract)) ########Debuging
             for child in list(annotated_abstract):        
@@ -106,9 +104,6 @@ class PubMed_Tagger:
                 attr_value = child.attrib[attr_name]
                 text = child.text
                 tail = child.tail
-                #print "text for", text
-                #print "tail for", text
-                #print '<%s %s="%s">%s</%s>%s' %(tag, attr_name, attr_value, text, tag, tail)
                 pygtk_tag_name = '%s %s="%s"' %(tag, attr_name, attr_value)
                 if text: 
                     end_iter = textbuffer.get_end_iter()
@@ -116,7 +111,6 @@ class PubMed_Tagger:
                     textbuffer.insert(end_iter,text)
                     new_end_iter = textbuffer.get_end_iter()
                     textmark_after = textbuffer.create_mark(None, new_end_iter, True)       
-                    #print text, attr_value, textmark_before, textmark_after        
                     if pygtk_tag_name in tags.keys():
                         tags[pygtk_tag_name].append((textmark_before, textmark_after))
                     else:
@@ -125,7 +119,6 @@ class PubMed_Tagger:
                 if tail:
                     textbuffer.insert(textbuffer.get_end_iter(),tail)
 
-        #for x,y in tags.items(): print x,y
         print "Tags found: ", tags_found
         data["article_abstract"] = textbuffer
         self.update_interface(data, textbuffer=True)       
@@ -184,7 +177,11 @@ class PubMed_Tagger:
         else:
             text = ""
             for abstract_section in data["article_abstract"]:
-                text += " " + abstract_section.text
+                if len(text) == 0:
+                    text += abstract_section.text
+
+                else:
+                    text += " " + abstract_section.text
  
             self.set_textview_text(self._abstract_textview,
                                    text)
@@ -273,21 +270,16 @@ class PubMed_Tagger:
 
         start = next_tag_iter.copy()
         while has_other_tag:
-            print "\nWhile again"
             tags = start.get_tags()
             tag = tags[0].get_property("name").split("Annotation")
             tag_name = tag[0].strip()
-            tag_attribute = tag[1].split("=")[1].strip()
+            tag_attribute = tag[1].split("=")[1].strip().replace("\"", "")
             next_tag_iter = start.copy()
             next_tag_iter.forward_to_tag_toggle(None)
             tail_tag_iter = next_tag_iter.copy()
             has_other_tag = tail_tag_iter.forward_to_tag_toggle(None)
-            #print "start", start.begins_tag(), start.ends_tag(),tag_attribute #start.get_tags()[0].get_property("name")
-            #print "next", next_tag_iter.begins_tag(), next_tag_iter.ends_tag(),tag_attribute #next_tag_iter.get_tags()[0].get_property("name")
-            #print "tail", tail_tag_iter.begins_tag(), tail_tag_iter.ends_tag(),tag_attribute #tail_tag_iter.get_tags()[0].get_property("name")
 
             if has_other_tag:
-                #print "tem outra tag"
                 children_tags.append(etree.SubElement(AbstractText, tag_name,
                                      attrib = {"Annotation": tag_attribute}))
                 children_tags[-1].text = textbuffer.get_text(start, next_tag_iter)
@@ -295,7 +287,6 @@ class PubMed_Tagger:
 
 
             else:
-                #print "nao tem outra tag"
                 children_tags.append(etree.SubElement(AbstractText, tag_name,
                                      attrib = {"Annotation": tag_attribute}))
                 children_tags[-1].text = textbuffer.get_text(start, next_tag_iter)
