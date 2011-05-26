@@ -7,3 +7,4 @@ PubChem, lightblue
 Organism, green
 Tissue, green
 Cell, green
+MESH_automatic, gray
