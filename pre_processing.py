@@ -157,7 +157,7 @@ def abstract2xml(abstract, terms):
 
 def get_mesh_entries():
     try:
-        db_connection = sqlite.connect("pubmed.db")
+        db_connection = sqlite.connect("mesh.db")
     except: 
         return 0
     cursor = db_connection.cursor()

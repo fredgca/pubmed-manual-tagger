@@ -113,7 +113,7 @@ class PubMed_Tagger:
             #recognize mesh terms automatically
             mesh_entries = pre_processing.get_mesh_entries()
             if not mesh_entries:
-                self.show_message("Probably you don't have the MESH database in pubmed.db file. Contact the developer for help")
+                self.show_message("Probably you don't have the MESH database in mesh.db file. Contact the developer for help")
                 return 0                
             else:
                 pass
