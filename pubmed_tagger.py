@@ -18,10 +18,11 @@
 
 import pygtk, gtk.glade
 import gtk
-import gobject
+#import gobject
 import urllib2
 import xml.etree.ElementTree as etree
 import pre_processing
+import xml_tools
 gtk.gdk.threads_init()
 
 class PubMed_Tagger:
@@ -62,12 +63,19 @@ class PubMed_Tagger:
     def on_filechooser_ok_button_clicked(self, *args):
         """
         Get the active filename in the filechooser_window and 
-        load its data using load_annotated_xml function
+        load its data using xml_tools.load_annotated_xml function
         """
         self._filechooser_window.hide()
         filename = self._filechooser_window.get_filename()
         self.current_open_file = filename
-        self.load_annotated_xml(filename)
+        data,tags = xml_tools.load_annotated_xml(filename)
+        if not data:
+           self.show_message("PubMed Tagger was not able to parse %s" %filename)
+           return 0
+
+        self.update_interface(data, textbuffer=True)       
+        self.tag_text(tags)
+
 
     def on_filechooser_cancel_button_clicked(self, *args):
         "Close the_filechooser_window"
@@ -91,7 +99,7 @@ class PubMed_Tagger:
             self.show_message("Ops! Check if you provided a valid PMID")
             return 0
 
-        query = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=%s&retmode=xml&tool=pubmed_tagger_in_development" %pmid
+        query = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=%s&retmode=xml&tool=pubmed-manual-tagger_in_development" %pmid
         result = urllib2.urlopen(query).read()        
         ####        
         output = pmid + ".xml"
@@ -102,14 +110,14 @@ class PubMed_Tagger:
         output_file.close()
         result_xml = etree.parse(output)
         ####
-        data = self.get_data_from_ncbi_xml(output)
+        data = xml_tools.get_data_from_ncbi_xml(output)
         if data and not pre_process:
             self.update_interface(data)
 
         elif data and pre_process:
             #get abstract text
             self.show_message("This can take a few seconds. Do not close the program")
-            abstract = self.get_abstract_text_from_etree(data)
+            abstract = xml_tools.get_abstract_text_from_etree(data)
             #recognize mesh terms automatically
             mesh_entries = pre_processing.get_mesh_entries()
             if not mesh_entries:
@@ -126,10 +134,15 @@ class PubMed_Tagger:
             self.replace_etree_element(result_xml.findall(".//Abstract")[0], xml_abstract)
             result_xml.write(annotated_filename)
             #load annotated xml
-            self.load_annotated_xml(annotated_filename)
+            data,tags = xml_tools.load_annotated_xml(annotated_filename)
+            if not data:
+               self.show_message("PubMed Tagger was not able to parse %s" %annotated_filename)
+               return 0
+ 
+            self.update_interface(data, textbuffer=True)       
+            self.tag_text(tags)
 
-        else:
-            self.show_message("PubMed Tagger was not able to parse %s" %output)
+
 
     def on_untag_button_clicked(self, *args):
         try:
@@ -256,100 +269,13 @@ class PubMed_Tagger:
 
         return model[active][0]
 
-    ################# Parsers #######################    
-    def load_annotated_xml(self,xml_filename):
-        """
-        Given the name of a xml containing a NCBI abstract,
-        with AbstractText annotated by Pubmed Tagger
-        Create a Gtk.TextBuffer with the 'marked' abstract, 
-        pass it to the interface and tag the mars with
-        tag_text function
-        """
-        tags = {}
-        textbuffer = gtk.TextBuffer()
-        data = self.get_data_from_ncbi_xml(xml_filename)
-        if data:
-            annotated_abstract_list = data["article_abstract"]
-        else:
-            self.show_message("PubMed Tagger was not able to parse %s" %xml_filename)
-            return 0
-
-        tags_found = 0
-        for annotated_abstract in annotated_abstract_list:
-            if annotated_abstract_list.index(annotated_abstract) != 0:
-                textbuffer.insert(textbuffer.get_end_iter(), " ")
-
-            if annotated_abstract.text:
-                if not annotated_abstract.text.isspace(): 
-                    textbuffer.insert(textbuffer.get_end_iter(),\
-                                      annotated_abstract.text)
-
-            tags_found += len(list(annotated_abstract)) ########Debuging
-            for child in list(annotated_abstract):        
-                tag = child.tag
-                attr_name = child.attrib.keys()[0]
-                attr_value = child.attrib[attr_name]
-                text = child.text
-                tail = child.tail
-                pygtk_tag_name = '%s %s="%s"' %(tag, attr_name, attr_value)
-                if text: 
-                    end_iter = textbuffer.get_end_iter()
-                    textmark_before = textbuffer.create_mark(None, end_iter, True)               
-                    textbuffer.insert(end_iter,text)
-                    new_end_iter = textbuffer.get_end_iter()
-                    textmark_after = textbuffer.create_mark(None, new_end_iter, True)       
-                    if pygtk_tag_name in tags.keys():
-                        tags[pygtk_tag_name].append((textmark_before, textmark_after))
-                    else:
-                        tags[pygtk_tag_name] = [(textmark_before, textmark_after)]
-
-                if tail:
-                    textbuffer.insert(textbuffer.get_end_iter(),tail)
-
-            if annotated_abstract.tail:
-                if not annotated_abstract.tail.isspace():
-                    textbuffer.insert(textbuffer.get_end_iter(),\
-                                      annotated_abstract.tail)
-
-        print "Tags found: ", tags_found #for debugging
-        data["article_abstract"] = textbuffer
-        self.update_interface(data, textbuffer=True)       
-        self.tag_text(tags)
-        print textbuffer.get_text(textbuffer.get_bounds()[0],textbuffer.get_bounds()[1])
-
-    def get_data_from_ncbi_xml(self,filename):
-        data = {}
-        try:
-            abstract = etree.parse(filename)
-        except:
-            return None
-            
-        data["pmid"] = abstract.findall(".//PMID")[0].text # a string
-        data["journal_title"] = abstract.findall(".//Title")[0].text # a string
-        data["article_title"] = abstract.findall(".//ArticleTitle")[0] # A elementTree element
-        data["article_abstract"] = abstract.findall(".//AbstractText") # A list of elementTree elements
-        data["publication_year"] = abstract.findall(".//PubDate")[0].getchildren()[0].text #a string
-        return data
-
-
-    def get_abstract_text_from_etree(self, data):
-        abstract = ""
-        for abstract_section in data["article_abstract"]:
-            if len(abstract) == 0:
-                abstract += abstract_section.text
-            else:
-                abstract += " " + abstract_section.text
-
-        return abstract
-        
-
     ########### Functions for the whole interface ###############
     def update_interface(self, data, textbuffer=False, *args):
         self.clear_interface()
         if textbuffer:
             self._abstract_textview.set_buffer(data["article_abstract"])
         else:
-            text = self.get_abstract_text_from_etree(data) 
+            text = xml_tools.get_abstract_text_from_etree(data) 
             self.set_textview_text(self._abstract_textview, text)
 
         self.set_textview_text(self._title_textview,
