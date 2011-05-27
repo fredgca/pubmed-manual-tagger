@@ -91,16 +91,16 @@ class PubMed_Tagger:
             self.show_message("Ops! Check if you provided a valid PMID")
             return 0
 
-        #query = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=%s&retmode=xml&tool=pubmed_tagger_in_development" %pmid
-        #result = urllib2.urlopen(query).read()        
+        query = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=%s&retmode=xml&tool=pubmed_tagger_in_development" %pmid
+        result = urllib2.urlopen(query).read()        
         ####        
         output = pmid + ".xml"
-        result_xml = etree.parse(output)#result)
-        #self.current_open_file = output
-        #output_file = open(output, "w")
-        #output_file.write(result)
-        #output_file.close()
-
+        #result_xml = etree.parse(output)#result)
+        self.current_open_file = output
+        output_file = open(output, "w")
+        output_file.write(result)
+        output_file.close()
+        result_xml = etree.parse(output)
         ####
         data = self.get_data_from_ncbi_xml(output)
         if data and not pre_process:
