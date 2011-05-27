@@ -1,13 +1,13 @@
-#    Copyright 2010 Frederico G. C. Arnoldi <fgcarnoldi /at/ gmail /dot/ com>
+#    Copyright 2011 Frederico G. C. Arnoldi <fgcarnoldi /at/ gmail /dot/ com>
 #
-#    This file is part of PubMed Tagger.
+#    This file is part of PubMed Manual Tagger.
 #
-#    PubMed Tagger is free software: you can redistribute it and/or modify
+#    PubMed Manual Tagger is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU Lesser General Public License as published by
 #    the Free Software Foundation, either version 3 of the License, or
 #    any later version.
 #
-#    PubMed Tagger is distributed in the hope that it will be useful,
+#    PubMed Manual Tagger is distributed in the hope that it will be useful,
 #    but WITHOUT ANY WARRANTY; without even the implied warranty of
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #    GNU Lesser General Public License for more details.
