@@ -18,7 +18,6 @@
 
 import pygtk, gtk.glade
 import gtk
-#import gobject
 import urllib2
 import xml.etree.ElementTree as etree
 import pre_processing
@@ -30,27 +29,28 @@ class PubMed_Tagger:
         """
         Load all widgets from the glade xml file that are listed at 'widget_names'
         """
-        widget_names = ["main_window", "abstract_textview","title_textview",
-                        "annotation_entry", "pmid_entry", "active_term_entry",
-                        "current_annotation_entry",
-                        "pmid_button","annotate_button", "untag_button",
-                        "reload_tags_button", "tags_combo",
-                        "pmid_label", "journal_label", "year_label",
-                        "save_button", "open_button",
-                        "filechooser_window", "filechooser_ok_button", 
-                        "filechooser_cancel_button",
-                        "message_window", "message_label", "message_ok_button",
-                        "preprocess_checkbutton"
+        widget_names = ["main_window", "abstract_textview","title_textview",   #main_window
+                        "annotation_entry", "pmid_entry", "active_term_entry", #main_window
+                        "current_annotation_entry","preprocess_checkbutton",   #main_window 
+                        "pmid_button","annotate_button", "untag_button",       #main_window
+                        "reload_tags_button", "tags_combo",                    #main_window
+                        "pmid_label", "journal_label", "year_label",           #main_window
+                        "save_button", "open_button",                          #main_window
+                        "annotation_window_button",                            #main_window
+                        "filechooser_window", "filechooser_ok_button",         #filechooser_window
+                        "filechooser_cancel_button",                           #filechooser_window
+                        "message_window", "message_label", "message_ok_button",#message_Window
+                        "annotation_erase_button", "annotation_treeview"       #annotation_window
                         ]
 
         for widget_name in widget_names:
             setattr(self, "_" + widget_name, self.xml_glade.get_widget(widget_name))
 
-    def close_window(self, *args):
+    def close_main_window(self, *args):
         "Close the Pubmed Tagger"
         gtk.main_quit()
 
-    def on_message_ok_button_clicked(self, *args):
+    def close_message_window(self, *args):
         "Close the message_window"
         self._message_window.hide()
         return 1
@@ -59,6 +59,8 @@ class PubMed_Tagger:
         self._message_label.set_text(message)
         self._message_window.show()
 
+    def show_annotation_window(self,*args):
+        self._annotation_window.show()
         
     def on_filechooser_ok_button_clicked(self, *args):
         """
@@ -74,10 +76,30 @@ class PubMed_Tagger:
            return 0
 
         self.update_interface(data, textbuffer=True)       
+        self.update_annotation_liststore(tags)
         self.tag_text(tags)
 
+    def update_annotation_liststore(self, tags):
+        self.annotation_liststore.clear()
+        textbuffer = self._abstract_textview.get_buffer()
+        check_tags = 0
+        for tag, bounds in tags.items():
+            for bound in bounds:
+                term_start_iter = textbuffer.get_iter_at_mark(bound[0])
+                term_end_iter = textbuffer.get_iter_at_mark(bound[1])
+                term = textbuffer.get_text(term_start_iter,term_end_iter)
+                start = term_start_iter.get_offset()
+                end = term_end_iter.get_offset()
+                mesh_number = tag.split("=")[1].replace("\"", "")
+                mesh = "MESH HEADING" #must be replace with a database query
+                annotation = "MESH Annotation" #must be replaced with a database query
+                self.annotation_liststore.append((term, start, end, mesh_number, mesh, annotation))
 
-    def on_filechooser_cancel_button_clicked(self, *args):
+                check_tags +=1
+
+        print check_tags
+
+    def close_filechooser_window(self, *args):
         "Close the_filechooser_window"
         self._filechooser_window.hide()
     
@@ -131,7 +153,7 @@ class PubMed_Tagger:
             #save annotated text in an xml
             xml_abstract = pre_processing.abstract2xml(abstract, entries)
             annotated_filename = "annotated_" + output
-            self.replace_etree_element(result_xml.findall(".//Abstract")[0], xml_abstract)
+            self._replace_etree_element(result_xml.findall(".//Abstract")[0], xml_abstract)
             result_xml.write(annotated_filename)
             #load annotated xml
             data,tags = xml_tools.load_annotated_xml(annotated_filename)
@@ -204,7 +226,7 @@ class PubMed_Tagger:
            
         filename = self.current_open_file #".xml"
         abstract_xml = etree.parse(filename)
-        self.replace_etree_element(abstract_xml.findall(".//Abstract")[0], Abstract)
+        self._replace_etree_element(abstract_xml.findall(".//Abstract")[0], Abstract)
         abstract_xml.write(filename)
 
 
@@ -268,6 +290,27 @@ class PubMed_Tagger:
             return None
 
         return model[active][0]
+
+    ########### Functions for the Annotation Treeview #############
+          
+    def on_annotation_erase_button_clicked(self, *args):
+        model, selections = self._annotation_treeview.get_selection().get_selected_rows()
+        iters = [model.get_iter(selection) for selection in selections]
+        tags = []
+        for path in iters:
+            tags.append((model.get_value(path, 1),
+                         model.get_value(path, 2),
+                         model.get_value(path, 3)))
+
+            model.remove(path)
+
+        textbuffer = self._abstract_textview.get_buffer()
+        for tag in tags:
+            tag_name = 'MESH Annotation="%s"' % tag[2]
+            start =  textbuffer.get_iter_at_offset(tag[0])
+            end = textbuffer.get_iter_at_offset(tag[1])
+            textbuffer.remove_tag_by_name(tag_name, start, end)
+
 
     ########### Functions for the whole interface ###############
     def update_interface(self, data, textbuffer=False, *args):
@@ -374,7 +417,7 @@ class PubMed_Tagger:
         self._tags_combo.set_active(0)
 
     ######## Internal #########
-    def replace_etree_element(self,original, new):
+    def _replace_etree_element(self,original, new):
         """
         A internal function to replace a subelement of
         a elementTree
@@ -385,6 +428,19 @@ class PubMed_Tagger:
         original.tag = new.tag
         original.attrib = new.attrib
         original[:] = new[:]
+
+    def _compare_tags(self,model,i1,i2):
+        """
+        This functions is designed to sort the annotation_treeview
+        """
+        if model.get_value(i1,1) == model.get_value(i1,1):
+            data1 = model.get_value(i1,2)
+            data2 = model.get_value(i2,2)
+        else:
+            data1 = model.get_value(i1,1)
+            data2 = model.get_value(i2,1)
+
+        return cmp(data1, data2)    
 
     ######## Constructor ########
     def __init__ (self):
@@ -397,22 +453,70 @@ class PubMed_Tagger:
             "on_annotation_button_clicked":self.on_annotation_button_clicked,
             "on_save_button_clicked": self.on_save_button_clicked,
             "on_open_button_clicked": self.on_open_button_clicked,
-            "on_close_button_clicked": self.close_window,
+            "on_close_button_clicked": self.close_main_window,
             "on_reload_tags_button_clicked": self.load_tags,
             "on_copy_clipboard": self.on_copy_clipboard,
             "on_cursor_movement_detected": self.on_cursor_movement_detected,
             "on_filechooser_ok_button_clicked": self.on_filechooser_ok_button_clicked,
-            "on_filechooser_cancel_button_clicked": self.on_filechooser_cancel_button_clicked,
-            "on_message_ok_button_clicked" : self.on_message_ok_button_clicked
+            "on_filechooser_cancel_button_clicked": self.close_filechooser_window,
+            "on_message_ok_button_clicked" : self.close_message_window,
+            "on_annotation_erase_button_clicked": self.on_annotation_erase_button_clicked,
                            }
 
         self.get_glade_widgets()
         self._main_window.show()
         self.xml_glade.signal_autoconnect(funcoes_callback)
-        self._main_window.connect("delete-event", self.close_window)
-        self._main_window.connect("delete-event", self.on_message_ok_button_clicked)
+        self._main_window.connect("delete-event", self.close_main_window)
+        self._message_window.connect("delete-event", self.close_message_window)
+
         self._current_annotation_entry.modify_base(gtk.STATE_NORMAL, 
                                        gtk.gdk.color_parse("yellow"))
+        #Setting treeview and liststore
+        self._annotation_treeview.get_selection().set_mode(gtk.SELECTION_MULTIPLE)
+        self.annotation_liststore = gtk.ListStore(str,int,int,str, str,str)
+        self.annotation_liststore.set_sort_func(1, self._compare_tags)
+        self.annotation_liststore.set_sort_column_id(1,gtk.SORT_ASCENDING)
+        self.annotation_liststore.append(["", 0, 0, "","", ""])
+        self._annotation_treeview.set_model(self.annotation_liststore)
+        ##Creating treeview columns, cellrenderer and packing them
+        self.term_column = gtk.TreeViewColumn('Term')
+        self.term_cell = gtk.CellRendererText()
+        self.term_column.pack_start(self.term_cell, True)
+        self.term_column.set_attributes(self.term_cell,markup=0)
+
+        self.start_column = gtk.TreeViewColumn('Start')
+        self.start_cell = gtk.CellRendererText()
+        self.start_column.pack_start(self.start_cell, True)
+        self.start_column.set_attributes(self.start_cell,markup=1)
+
+        self.end_column = gtk.TreeViewColumn('End')
+        self.end_cell = gtk.CellRendererText()
+        self.end_column.pack_start(self.end_cell, True)
+        self.end_column.set_attributes(self.end_cell,markup=2)
+
+        self.mesh_number_column = gtk.TreeViewColumn('MESH Number')
+        self.mesh_number_cell = gtk.CellRendererText()
+        self.mesh_number_column.pack_start(self.mesh_number_cell, True)
+        self.mesh_number_column.set_attributes(self.mesh_number_cell,markup=3)
+
+        self.mesh_heading_column = gtk.TreeViewColumn('MESH Heading')
+        self.mesh_heading_cell = gtk.CellRendererText()
+        self.mesh_heading_column.pack_start(self.mesh_heading_cell, True)
+        self.mesh_heading_column.set_attributes(self.mesh_heading_cell,markup=4)
+
+        self.mesh_annotation_column = gtk.TreeViewColumn('Annotation')
+        self.mesh_annotation_cell = gtk.CellRendererText()
+        self.mesh_annotation_column.pack_start(self.mesh_annotation_cell, True)
+        self.mesh_annotation_column.set_attributes(self.mesh_annotation_cell,markup=5)
+
+        ##Appending treeview columns
+        self._annotation_treeview.append_column(self.term_column)
+        self._annotation_treeview.append_column(self.start_column)
+        self._annotation_treeview.append_column(self.end_column)
+        self._annotation_treeview.append_column(self.mesh_number_column)
+        self._annotation_treeview.append_column(self.mesh_heading_column)
+        self._annotation_treeview.append_column(self.mesh_annotation_column)
+
         self.current_open_file = ""
         self.tag_colors = {}
         self.clear_interface()

@@ -57,8 +57,7 @@ def load_annotated_xml(xml_filename):
     Given the name of a xml containing a NCBI abstract,
     with AbstractText annotated by Pubmed Tagger
     Create a Gtk.TextBuffer with the 'marked' abstract, 
-    pass it to the interface and tag the mars with
-    tag_text function
+    return it and a dictionary like {tags: (mark_stat, mark_end)}
     """
     tags = {}
     textbuffer = gtk.TextBuffer()
@@ -92,19 +91,16 @@ def load_annotated_xml(xml_filename):
                 textbuffer.insert(end_iter,text)
                 new_end_iter = textbuffer.get_end_iter()
                 textmark_after = textbuffer.create_mark(None, new_end_iter, True)       
-                if pygtk_tag_name in tags.keys():
-                    tags[pygtk_tag_name].append((textmark_before, textmark_after))
-                else:
-                    tags[pygtk_tag_name] = [(textmark_before, textmark_after)]
+                if pygtk_tag_name.startswith("MESH"):
+                    if pygtk_tag_name in tags.keys():
+                        tags[pygtk_tag_name].append((textmark_before, textmark_after))
+                    else:
+                        tags[pygtk_tag_name] = [(textmark_before, textmark_after)]
 
             if tail:
                 textbuffer.insert(textbuffer.get_end_iter(),tail)
 
-        #if annotated_abstract.tail:
-        #    if not annotated_abstract.tail.isspace():
-        #        textbuffer.insert(textbuffer.get_end_iter(),\
-        #                          annotated_abstract.tail)
-
+    
     print "Tags found: ", tags_found #for debugging
     data["article_abstract"] = textbuffer
     print textbuffer.get_text(textbuffer.get_bounds()[0],textbuffer.get_bounds()[1])
