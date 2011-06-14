@@ -14,7 +14,7 @@
 #
 #    You should have received a copy of the GNU Lesser General Public License
 #    along with PubMed Tagger.  If not, see <http://www.gnu.org/licenses/>.
-
+import xml_tools
 import xml.etree.ElementTree as etree
 from pysqlite2 import dbapi2 as sqlite
 
@@ -47,6 +47,7 @@ class Term:
 
     def __repr__(self):
         return "%s, %s" %(self.term, self.start)
+
 
 def recognize_mesh_entries(mesh_entries, abstract):
     """
@@ -137,7 +138,7 @@ def abstract2xml(abstract, terms):
         #TODO If three terms overlaps
         #if adjacent terms are not overlapping
         if next_term.start > term.end and term.start > previous_term.end:
-            print "if", terms.index(term), len(terms), next_term.start, term.end, term.term, term.ui,#for debugging
+            #print "if", terms.index(term), len(terms), next_term.start, term.end, term.term, term.ui,#for debugging
             tag_name = "MESH_automatic"
             terms_elements.append(etree.SubElement(AbstractText, "MESH",
                                         attrib = {"Annotation": term.ui}))
@@ -148,11 +149,11 @@ def abstract2xml(abstract, terms):
             else:
                 terms_elements[-1].tail = abstract[term.end:]
 
-            print terms_elements[-1].text, terms_elements[-1].tail #for debugging
+            #print terms_elements[-1].text, terms_elements[-1].tail #for debugging
 
         #if the current term overlaps the precedent
         elif term.start < previous_term.end and term.end < next_term.start:
-            print "elif", terms.index(term), len(terms), term.start, previous_term.end, term.term, term.ui, #for debugging
+            #print "elif", terms.index(term), len(terms), term.start, previous_term.end, term.term, term.ui, #for debugging
             tag_name = "MESH_automatic"
             annotation = "%s|%s" %(term.ui, next_term.ui)
             terms_elements.append(etree.SubElement(AbstractText, "MESH",
@@ -163,14 +164,22 @@ def abstract2xml(abstract, terms):
             else:
                 terms_elements[-1].tail = abstract[term.end:]
 
-            print terms_elements[-1].text, terms_elements[-1].tail  #for debugging
+            #print terms_elements[-1].text, terms_elements[-1].tail  #for debugging
 
         #if the current term overlaps the next
         elif term.start > previous_term.end and term.end > next_term.start:
-            print "******elif pass*****", term.term, next_term.term #for debugging
+            #print "******elif pass*****", term.term, next_term.term #for debugging
             pass
 
     return Abstract
+
+def create_annotated_abstract_xml(ncbi_xml, abstract, mesh_entries, annotated_filename):
+    terms = recognize_mesh_entries(mesh_entries, "".join(abstract))
+    xml_annotated_abstract = abstract2xml(abstract, terms)
+    xml_tools.replace_etree_element(ncbi_xml.findall(".//Abstract")[0], 
+                                    xml_annotated_abstract)
+    ncbi_xml.write(annotated_filename)
+    
 
 def get_mesh_entries():
     try:

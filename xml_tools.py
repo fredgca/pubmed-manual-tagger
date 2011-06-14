@@ -103,5 +103,64 @@ def load_annotated_xml(xml_filename):
     
     print "Tags found: ", tags_found #for debugging
     data["article_abstract"] = textbuffer
-    print textbuffer.get_text(textbuffer.get_bounds()[0],textbuffer.get_bounds()[1])
     return data, tags
+
+def replace_etree_element(original, new):
+    """
+    A internal function to replace a subelement of
+    a elementTree
+    """
+    original.clear()
+    original.text = new.text
+    original.tail = new.tail
+    original.tag = new.tag
+    original.attrib = new.attrib
+    original[:] = new[:]
+
+def save_annotated_abstract(filename, textbuffer):
+    """
+    Given the file name of a saved NCBI abstract (xml) 
+    and a gtk.textbuffer containing an annotated abstract with gtk.tags, 
+    replace the current Abstract Element with the content of the textbuffer.
+    The tags in the textbuffer are saved as XML elements.
+    """
+    start,end = textbuffer.get_bounds()
+    #Creating the new XML Element
+    Abstract = etree.Element("Abstract")
+    AbstractText = etree.SubElement(Abstract, "AbstractText")
+    #Iterating over the textbuffer
+    next_tag_iter = start.copy()
+    has_other_tag = next_tag_iter.forward_to_tag_toggle(None)
+    children_tags = []
+    if not start.begins_tag() and has_other_tag:
+       AbstractText.text = textbuffer.get_text(start,next_tag_iter)
+    elif not start.begins_tag() and not has_other_tag:
+       AbstractText.text = textbuffer.get_text(start,end)
+
+    start = next_tag_iter.copy()
+    while has_other_tag:
+        tags = start.get_tags()
+        tag = tags[0].get_property("name").split("Annotation")
+        tag_name = tag[0].strip()
+        tag_attribute = tag[1].split("=")[1].strip().replace("\"", "")
+        next_tag_iter = start.copy()
+        next_tag_iter.forward_to_tag_toggle(None)
+        tail_tag_iter = next_tag_iter.copy()
+        has_other_tag = tail_tag_iter.forward_to_tag_toggle(None)
+        if has_other_tag:
+            children_tags.append(etree.SubElement(AbstractText, tag_name,
+                                 attrib = {"Annotation": tag_attribute}))
+            children_tags[-1].text = textbuffer.get_text(start, next_tag_iter)
+            children_tags[-1].tail = textbuffer.get_text(next_tag_iter, tail_tag_iter)
+
+        else:
+            children_tags.append(etree.SubElement(AbstractText, tag_name,
+                                 attrib = {"Annotation": tag_attribute}))
+            children_tags[-1].text = textbuffer.get_text(start, next_tag_iter)
+            children_tags[-1].tail = textbuffer.get_text(next_tag_iter, textbuffer.get_end_iter())
+
+        start = tail_tag_iter.copy()           
+        abstract_xml = etree.parse(filename)
+        replace_etree_element(abstract_xml.findall(".//Abstract")[0], Abstract)
+        abstract_xml.write(filename)
+

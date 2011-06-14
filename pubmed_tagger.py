@@ -1,28 +1,8 @@
-#    Copyright 2011 Frederico G. C. Arnoldi <fgcarnoldi /at/ gmail /dot/ com>
-#
-#    This file is part of PubMed Manual Tagger.
-#
-#    PubMed Manual Tagger is free software: you can redistribute it and/or modify
-#    it under the terms of the GNU Lesser General Public License as published by
-#    the Free Software Foundation, either version 3 of the License, or
-#    any later version.
-#
-#    PubMed Manual Tagger is distributed in the hope that it will be useful,
-#    but WITHOUT ANY WARRANTY; without even the implied warranty of
-#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#    GNU Lesser General Public License for more details.
-#
-#    You should have received a copy of the GNU Lesser General Public License
-#    along with PubMed Tagger.  If not, see <http://www.gnu.org/licenses/>.
-
-
 import pygtk, gtk.glade
 import gtk
-import urllib2
-import xml.etree.ElementTree as etree
 import pre_processing
-import xml_tools
-gtk.gdk.threads_init()
+import xml_tools, entrez
+from multiprocessing import Process
 
 class PubMed_Tagger:
     def get_glade_widgets(self):
@@ -45,6 +25,8 @@ class PubMed_Tagger:
 
         for widget_name in widget_names:
             setattr(self, "_" + widget_name, self.xml_glade.get_widget(widget_name))
+
+    ###### Interface events ###########
 
     def close_main_window(self, *args):
         "Close the Pubmed Tagger"
@@ -75,29 +57,9 @@ class PubMed_Tagger:
            self.show_message("PubMed Tagger was not able to parse %s" %filename)
            return 0
 
-        self.update_interface(data, textbuffer=True)       
+        self._update_interface(data, textbuffer=True)       
         self.update_annotation_liststore(tags)
         self.tag_text(tags)
-
-    def update_annotation_liststore(self, tags):
-        self.annotation_liststore.clear()
-        textbuffer = self._abstract_textview.get_buffer()
-        check_tags = 0
-        for tag, bounds in tags.items():
-            for bound in bounds:
-                term_start_iter = textbuffer.get_iter_at_mark(bound[0])
-                term_end_iter = textbuffer.get_iter_at_mark(bound[1])
-                term = textbuffer.get_text(term_start_iter,term_end_iter)
-                start = term_start_iter.get_offset()
-                end = term_end_iter.get_offset()
-                mesh_number = tag.split("=")[1].replace("\"", "")
-                mesh = "MESH HEADING" #must be replace with a database query
-                annotation = "MESH Annotation" #must be replaced with a database query
-                self.annotation_liststore.append((term, start, end, mesh_number, mesh, annotation))
-
-                check_tags +=1
-
-        print check_tags
 
     def close_filechooser_window(self, *args):
         "Close the_filechooser_window"
@@ -113,34 +75,28 @@ class PubMed_Tagger:
         save it in the current folder - as pmid_number.xml - 
         and load it on the interface for annotation
         """
+        #TODO: this method could be better organized
         pmid = self._pmid_entry.get_text()
         pre_process = self._preprocess_checkbutton.get_active()
+        #Check if the input has a valid PMID
         try:
             int(pmid)
         except:
             self.show_message("Ops! Check if you provided a valid PMID")
             return 0
 
-        query = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=%s&retmode=xml&tool=pubmed-manual-tagger_in_development" %pmid
-        result = urllib2.urlopen(query).read()        
-        ####        
-        output = pmid + ".xml"
-        #result_xml = etree.parse(output)#result)
-        self.current_open_file = output
-        output_file = open(output, "w")
-        output_file.write(result)
-        output_file.close()
-        result_xml = etree.parse(output)
-        ####
-        data = xml_tools.get_data_from_ncbi_xml(output)
-        if data and not pre_process:
-            self.update_interface(data)
+        self.current_open_file = pmid + ".xml"
+        raw_ncbi_xml= entrez.get_abstract_from_ncbi(pmid, self.current_open_file)
+        data = xml_tools.get_data_from_ncbi_xml(self.current_open_file)
 
+        #just display the raw abstract, withou any preprocessing
+        if data and not pre_process:
+            self._update_interface(data)
+
+        #automaticaly recognize MESH terms and display the annotated abstract
         elif data and pre_process:
-            #get abstract text
             self.show_message("This can take a few seconds. Do not close the program")
-            abstract = xml_tools.get_abstract_text_from_etree(data)
-            #recognize mesh terms automatically
+            #get mesh terms from database
             mesh_entries = pre_processing.get_mesh_entries()
             if not mesh_entries:
                 self.show_message("Probably you don't have the MESH database in mesh.db file. Contact the developer for help")
@@ -148,35 +104,50 @@ class PubMed_Tagger:
             else:
                 pass
 
-            #the "".join(abstract) is just to pass a copy of abstract, instead of itself
-            entries = pre_processing.recognize_mesh_entries(mesh_entries, "".join(abstract))
-            #save annotated text in an xml
-            xml_abstract = pre_processing.abstract2xml(abstract, entries)
-            annotated_filename = "annotated_" + output
-            self._replace_etree_element(result_xml.findall(".//Abstract")[0], xml_abstract)
-            result_xml.write(annotated_filename)
+            abstract_text = xml_tools.get_abstract_text_from_etree(data)
+            #recognize MESH terms automatically
+            annotated_filename = "annotated_" + self.current_open_file
+            #using multiprocessing
+            process = Process(target=pre_processing.create_annotated_abstract_xml,
+                              args = (raw_ncbi_xml, abstract_text, mesh_entries,
+                                       annotated_filename))
+
+            #using threads
+            #process = threading.Thread(target=pre_processing.create_annotated_abstract_xml,
+            #                          args = (raw_ncbi_xml, abstract_text, mesh_entries,
+            #                                   annotated_filename))
+            #process.start()
+            #serial code, really slower than with threads or multiprocessing
+            #pre_processing.create_annotated_abstract_xml(raw_ncbi_xml,
+            #                                              abstract_text, 
+            #                                              mesh_entries,
+            #                                              annotated_filename)
             #load annotated xml
+
             data,tags = xml_tools.load_annotated_xml(annotated_filename)
             if not data:
                self.show_message("PubMed Tagger was not able to parse %s" %annotated_filename)
                return 0
  
-            self.update_interface(data, textbuffer=True)       
+            self._update_interface(data, textbuffer=True)       
             self.tag_text(tags)
-
+            self.update_annotation_liststore(tags)
 
 
     def on_untag_button_clicked(self, *args):
         try:
-            x,y = self.active_term_bounds
+            x_iter,y_iter = self.active_term_bounds
+            x = x_iter.get_offset()
         except:
             self.show_message("No annotated term selected")
             return 0
 
-        tags = x.get_tags()
+        self._remove_tag_from_annotation_treeview(x)
+        tags = x_iter.get_tags()
         for tag in tags:
-            self.remove_tag(tag, self._abstract_textview, (x, y))
-
+            #removig tag from the textbuffer
+            self.remove_tag(tag, self._abstract_textview, (x_iter, y_iter))
+        
 
     def on_save_button_clicked(self, *args):
         textbuffer = self._abstract_textview.get_buffer()
@@ -186,48 +157,7 @@ class PubMed_Tagger:
         if len(textbuffer.get_text(start,end)) == 0:
             self.show_message("There is no text to be saved")
             return
-
-        Abstract = etree.Element("Abstract")
-        AbstractText = etree.SubElement(Abstract, "AbstractText")
-        next_tag_iter = start.copy()
-        has_other_tag = next_tag_iter.forward_to_tag_toggle(None)
-        children_tags = []
-        if not start.begins_tag() and has_other_tag:
-            AbstractText.text = textbuffer.get_text(start,next_tag_iter)
-        elif not start.begins_tag() and not has_other_tag:
-            AbstractText.text = textbuffer.get_text(start,end)
-
-        start = next_tag_iter.copy()
-        while has_other_tag:
-            tags = start.get_tags()
-            tag = tags[0].get_property("name").split("Annotation")
-            tag_name = tag[0].strip()
-            tag_attribute = tag[1].split("=")[1].strip().replace("\"", "")
-            next_tag_iter = start.copy()
-            next_tag_iter.forward_to_tag_toggle(None)
-            tail_tag_iter = next_tag_iter.copy()
-            has_other_tag = tail_tag_iter.forward_to_tag_toggle(None)
-
-            if has_other_tag:
-                children_tags.append(etree.SubElement(AbstractText, tag_name,
-                                     attrib = {"Annotation": tag_attribute}))
-                children_tags[-1].text = textbuffer.get_text(start, next_tag_iter)
-                children_tags[-1].tail = textbuffer.get_text(next_tag_iter, tail_tag_iter)
-
-
-            else:
-                children_tags.append(etree.SubElement(AbstractText, tag_name,
-                                     attrib = {"Annotation": tag_attribute}))
-                children_tags[-1].text = textbuffer.get_text(start, next_tag_iter)
-                children_tags[-1].tail = textbuffer.get_text(next_tag_iter, textbuffer.get_end_iter())
-
-            start = tail_tag_iter.copy()
-
-           
-        filename = self.current_open_file #".xml"
-        abstract_xml = etree.parse(filename)
-        self._replace_etree_element(abstract_xml.findall(".//Abstract")[0], Abstract)
-        abstract_xml.write(filename)
+        xml_tools.save_annotated_abstract(self.current_open_file, textbuffer)
 
 
     def on_annotation_button_clicked(self, *args):
@@ -241,6 +171,12 @@ class PubMed_Tagger:
         if attribute_value:
             pygtk_tag = str(attribute_name + ' Annotation="' + attribute_value + '"')
             self.insert_tag(pygtk_tag, self._abstract_textview, self.active_term_bounds)
+            x,y = self.active_term_bounds           
+            self.annotation_liststore.append([text, x.get_offset(), 
+                                              y.get_offset(), 
+                                              attribute_value,
+                                              "MESH HEADING*", "MESH Annotation*"])
+            #Term, start, end, mesh_number, mesh_heading, mesh_annotation
 
         else: 
             pygtk_tag = str(attribute_name + ' Annotation=""')
@@ -250,6 +186,7 @@ class PubMed_Tagger:
         self._active_term_entry.set_text("")
         self.active_term_bounds = (0,0)
         self._annotation_entry.set_text("")
+
 
     def on_copy_clipboard(self, *args):
         clipboard, bounds = self.get_selected_clipboard(self._abstract_textview)
@@ -292,6 +229,26 @@ class PubMed_Tagger:
         return model[active][0]
 
     ########### Functions for the Annotation Treeview #############
+    def update_annotation_liststore(self, tags):
+        self.annotation_liststore.clear()
+        textbuffer = self._abstract_textview.get_buffer()
+        check_tags = 0
+        for tag, bounds in tags.items():
+            for bound in bounds:
+                term_start_iter = textbuffer.get_iter_at_mark(bound[0])
+                term_end_iter = textbuffer.get_iter_at_mark(bound[1])
+                term = textbuffer.get_text(term_start_iter,term_end_iter)
+                start = term_start_iter.get_offset()
+                end = term_end_iter.get_offset()
+                mesh_number = tag.split("=")[1].replace("\"", "")
+                mesh = "MESH HEADING" #must be replace with a database query
+                annotation = "MESH Annotation" #must be replaced with a database query
+                self.annotation_liststore.append((term, start, end, mesh_number, mesh, annotation))
+
+                check_tags +=1
+
+        print "Tags in liststore: ", check_tags
+
           
     def on_annotation_erase_button_clicked(self, *args):
         model, selections = self._annotation_treeview.get_selection().get_selected_rows()
@@ -311,33 +268,48 @@ class PubMed_Tagger:
             end = textbuffer.get_iter_at_offset(tag[1])
             textbuffer.remove_tag_by_name(tag_name, start, end)
 
+    def _remove_tag_from_annotation_treeview(self,x):
+        self._annotation_treeview.get_selection().select_all()
+        model, selections = self._annotation_treeview.get_selection().get_selected_rows()
+        iters = [model.get_iter(selection) for selection in selections]
+        lines = []
+        for path in iters:
+            if model.get_value(path, 1) == x:
+                model.remove(path)
+            else:
+                pass
+        self._annotation_treeview.get_selection().unselect_all()
 
-    ########### Functions for the whole interface ###############
-    def update_interface(self, data, textbuffer=False, *args):
-        self.clear_interface()
-        if textbuffer:
-            self._abstract_textview.set_buffer(data["article_abstract"])
+
+    ############# AbstractTextView Functions ##################
+    #**Erasing tags**##
+    def remove_tag(self, tag, textview, bounds):
+        """
+        Given a tag_name, a textview, and a tuple with the bounds of a
+        term, remove the specified tag
+        """
+        textbuffer = textview.get_buffer()
+        textbuffer.remove_tag(tag, bounds[0], bounds[1])
+        self._remove_tag_from_annotation_treeview(bounds[0].get_offset())
+
+
+    #**Inserting Tags**##
+    def insert_tag(self, tag, textview, bounds):
+        """
+        Given a tag_name, a textview, and a tuple with the bounds of a
+        term, tag the term
+        """
+        textbuffer = textview.get_buffer()
+        tagtable = textbuffer.get_tag_table()
+        if tagtable.lookup(tag):           
+            textbuffer.apply_tag_by_name(tag, bounds[0], bounds[1])       
         else:
-            text = xml_tools.get_abstract_text_from_etree(data) 
-            self.set_textview_text(self._abstract_textview, text)
-
-        self.set_textview_text(self._title_textview,
-                               data["article_title"].text)
-        self._pmid_label.set_text(data["pmid"])
-        self._journal_label.set_text(data["journal_title"])
-        self._year_label.set_text(data["publication_year"])
-
-    def clear_interface(self):
-        """
-        Clear all labels and textviews
-        """
-        self.set_textview_text(self._abstract_textview,"")
-        self.set_textview_text(self._title_textview,"")
-        self._pmid_label.set_text("")
-        self._journal_label.set_text("")
-        self._year_label.set_text("")
-
-    ############# Tags ##################
+            xml_tag_name = tag.split(" ")[0]
+            if xml_tag_name in self.tag_colors.keys():
+                tag_color = self.tag_colors[xml_tag_name]
+                textbuffer.create_tag(tag, background =tag_color)
+                textbuffer.apply_tag_by_name(tag, bounds[0], bounds[1])
+  
     def write_tag_on_textbuffer(self, textbuffer, textMark, opening_tag):
         """
         Check the existance of a TextTag in the given textbuffer at given textMark
@@ -372,37 +344,9 @@ class PubMed_Tagger:
                 end = textbuffer.get_iter_at_mark(bounds[1])
                 self.insert_tag(tag, self._abstract_textview, (start,end))
                 tags_added +=1
-        print "Tags added: ", tags_added  #for debugging
-
-    def insert_tag(self, tag, textview, bounds):
-        """
-        Given a tag_name, a textview, and a tuple with the bounds of a
-        term, tag the term
-        """
-        textbuffer = textview.get_buffer()
-        tagtable = textbuffer.get_tag_table()
-        if tagtable.lookup(tag):           
-            textbuffer.apply_tag_by_name(tag, bounds[0], bounds[1])       
-        else:
-            xml_tag_name = tag.split(" ")[0]
-            if xml_tag_name in self.tag_colors.keys():
-                tag_color = self.tag_colors[xml_tag_name]
-                textbuffer.create_tag(tag, background =tag_color)
-                textbuffer.apply_tag_by_name(tag, bounds[0], bounds[1])
-
+        print "Tags added (textbuffer): ", tags_added  #for debugging
         
-    def remove_tag(self, tag, textview, bounds):
-        """
-        Given a tag_name, a textview, and a tuple with the bounds of a
-        term, remove the specified tag
-        """
-        textbuffer = textview.get_buffer()
-        textbuffer.remove_tag(tag, bounds[0], bounds[1])
-
-    def set_textview_text(self, textview, text):
-        textbuffer = textview.get_buffer()
-        textbuffer.set_text(text)
-
+    #**Loading tags**#       
     def load_tags(self, *args):
         """
         Load tags described at tags.txt
@@ -417,17 +361,10 @@ class PubMed_Tagger:
         self._tags_combo.set_active(0)
 
     ######## Internal #########
-    def _replace_etree_element(self,original, new):
-        """
-        A internal function to replace a subelement of
-        a elementTree
-        """
-        original.clear()
-        original.text = new.text
-        original.tail = new.tail
-        original.tag = new.tag
-        original.attrib = new.attrib
-        original[:] = new[:]
+    def _set_textview_text(self, textview, text):
+        textbuffer = textview.get_buffer()
+        textbuffer.set_text(text)
+
 
     def _compare_tags(self,model,i1,i2):
         """
@@ -442,9 +379,36 @@ class PubMed_Tagger:
 
         return cmp(data1, data2)    
 
+
+    def _update_interface(self, data, textbuffer=False, *args):
+        self._clear_interface()
+        if textbuffer:
+            self._abstract_textview.set_buffer(data["article_abstract"])
+        else:
+            text = xml_tools.get_abstract_text_from_etree(data) 
+            self._set_textview_text(self._abstract_textview, text)
+
+        self._set_textview_text(self._title_textview,
+                               data["article_title"].text)
+        self._pmid_label.set_text(data["pmid"])
+        self._journal_label.set_text(data["journal_title"])
+        self._year_label.set_text(data["publication_year"])
+
+    def _clear_interface(self):
+        """
+        Clear all labels and textviews
+        """
+        self._set_textview_text(self._abstract_textview,"")
+        self._set_textview_text(self._title_textview,"")
+        self._pmid_label.set_text("")
+        self._journal_label.set_text("")
+        self._year_label.set_text("")
+
+
     ######## Constructor ########
     def __init__ (self):
         """Pubmed Tagger is an app to make text annotation easier"""
+        #threading.Thread.__init__(self)    
         self.xml_glade= gtk.glade.XML("gui/interface.glade")
         # --- Dicionario com as funcoes callback ---
         funcoes_callback = {
@@ -476,7 +440,8 @@ class PubMed_Tagger:
         self.annotation_liststore = gtk.ListStore(str,int,int,str, str,str)
         self.annotation_liststore.set_sort_func(1, self._compare_tags)
         self.annotation_liststore.set_sort_column_id(1,gtk.SORT_ASCENDING)
-        self.annotation_liststore.append(["", 0, 0, "","", ""])
+        #self.annotation_liststore.append(["Example of Term", 0, 0, "A MESH Number",
+        #                                  "A MESH Heading", "A MESH Annotation"])
         self._annotation_treeview.set_model(self.annotation_liststore)
         ##Creating treeview columns, cellrenderer and packing them
         self.term_column = gtk.TreeViewColumn('Term')
@@ -519,13 +484,12 @@ class PubMed_Tagger:
 
         self.current_open_file = ""
         self.tag_colors = {}
-        self.clear_interface()
+        self._clear_interface()
         self._pmid_entry.set_text("21575226")#Type a valid PMID to download")
         self.load_tags()
         self.active_term_bounds = ()
 
 if __name__ == "__main__":              
     PubMed_Tagger()
-    gtk.gdk.threads_enter()
     gtk.main()
-    gtk.gdk.threads_leave()                  
+
