@@ -111,7 +111,8 @@ class PubMed_Tagger:
             process = Process(target=pre_processing.create_annotated_abstract_xml,
                               args = (raw_ncbi_xml, abstract_text, mesh_entries,
                                        annotated_filename))
-
+            process.start()
+            process.join()
             #using threads
             #process = threading.Thread(target=pre_processing.create_annotated_abstract_xml,
             #                          args = (raw_ncbi_xml, abstract_text, mesh_entries,
@@ -123,7 +124,7 @@ class PubMed_Tagger:
             #                                              mesh_entries,
             #                                              annotated_filename)
             #load annotated xml
-
+            
             data,tags = xml_tools.load_annotated_xml(annotated_filename)
             if not data:
                self.show_message("PubMed Tagger was not able to parse %s" %annotated_filename)
