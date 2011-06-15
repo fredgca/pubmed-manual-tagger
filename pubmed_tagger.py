@@ -2,7 +2,7 @@ import pygtk, gtk.glade
 import gtk
 import pre_processing
 import xml_tools, entrez
-from multiprocessing import Process
+#from multiprocessing import Process
 
 class PubMed_Tagger:
     def get_glade_widgets(self):
@@ -108,21 +108,16 @@ class PubMed_Tagger:
             #recognize MESH terms automatically
             annotated_filename = "annotated_" + self.current_open_file
             #using multiprocessing
-            process = Process(target=pre_processing.create_annotated_abstract_xml,
+            #process = Process(target=pre_processing.create_annotated_abstract_xml,
                               args = (raw_ncbi_xml, abstract_text, mesh_entries,
                                        annotated_filename))
-            process.start()
-            process.join()
-            #using threads
-            #process = threading.Thread(target=pre_processing.create_annotated_abstract_xml,
-            #                          args = (raw_ncbi_xml, abstract_text, mesh_entries,
-            #                                   annotated_filename))
             #process.start()
-            #serial code, really slower than with threads or multiprocessing
-            #pre_processing.create_annotated_abstract_xml(raw_ncbi_xml,
-            #                                              abstract_text, 
-            #                                              mesh_entries,
-            #                                              annotated_filename)
+            #process.join()
+            #serial code
+            pre_processing.create_annotated_abstract_xml(raw_ncbi_xml,
+                                                          abstract_text, 
+                                                          mesh_entries,
+                                                          annotated_filename)
             #load annotated xml
             
             data,tags = xml_tools.load_annotated_xml(annotated_filename)

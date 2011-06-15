@@ -16,6 +16,8 @@
 #    along with PubMed Tagger.  If not, see <http://www.gnu.org/licenses/>.
 import xml_tools
 import xml.etree.ElementTree as etree
+#import multiprocessing
+from string import ascii_lowercase as lts    
 from pysqlite2 import dbapi2 as sqlite
 
 class Term:
@@ -54,7 +56,6 @@ def recognize_mesh_entries(mesh_entries, abstract):
     Recieve a list with tuples (mesh_term, ui) and an abstract(str)
     return a list o Terms, sorted by start_tem_position
     """
-    from string import ascii_lowercase as lts    
     abstract_lenght = len(abstract)
     abstract_lower = abstract.lower()
     founds = 0

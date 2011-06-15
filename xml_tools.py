@@ -133,13 +133,15 @@ def save_annotated_abstract(filename, textbuffer):
     has_other_tag = next_tag_iter.forward_to_tag_toggle(None)
     children_tags = []
     if not start.begins_tag() and has_other_tag:
-       AbstractText.text = textbuffer.get_text(start,next_tag_iter)
+        AbstractText.text = textbuffer.get_text(start,next_tag_iter)
+        start = next_tag_iter.copy()
     elif not start.begins_tag() and not has_other_tag:
-       AbstractText.text = textbuffer.get_text(start,end)
+        AbstractText.text = textbuffer.get_text(start,end)
+        start = next_tag_iter.copy()
 
-    start = next_tag_iter.copy()
     while has_other_tag:
         tags = start.get_tags()
+        print tags        
         tag = tags[0].get_property("name").split("Annotation")
         tag_name = tag[0].strip()
         tag_attribute = tag[1].split("=")[1].strip().replace("\"", "")
@@ -160,7 +162,8 @@ def save_annotated_abstract(filename, textbuffer):
             children_tags[-1].tail = textbuffer.get_text(next_tag_iter, textbuffer.get_end_iter())
 
         start = tail_tag_iter.copy()           
-        abstract_xml = etree.parse(filename)
-        replace_etree_element(abstract_xml.findall(".//Abstract")[0], Abstract)
-        abstract_xml.write(filename)
+
+    abstract_xml = etree.parse(filename)
+    replace_etree_element(abstract_xml.findall(".//Abstract")[0], Abstract)
+    abstract_xml.write(filename)
 
