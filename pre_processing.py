@@ -14,9 +14,11 @@
 #
 #    You should have received a copy of the GNU Lesser General Public License
 #    along with PubMed Tagger.  If not, see <http://www.gnu.org/licenses/>.
+import time
 import xml_tools
 import xml.etree.ElementTree as etree
-#import multiprocessing
+import multiprocessing
+import itertools
 from string import ascii_lowercase as lts    
 from pysqlite2 import dbapi2 as sqlite
 
@@ -45,10 +47,49 @@ class Term:
             return 0
 
     def __str__(self):
-        return "%s, %s" %(self.term, self.start)
+        return "%s(%s)" %(self.term, self.start)
 
     def __repr__(self):
-        return "%s, %s" %(self.term, self.start)
+        return "%s(%s)" %(self.term, self.start)
+
+
+def find_term(mesh_entry_ui):
+    #mesh_entry_ui = data[0]
+    #abstract_lower = data[1]
+    #abstract_lenght = data[2]
+    term_positions = []
+    mesh_entry = mesh_entry_ui[0].lower()
+    ui = mesh_entry_ui[1]
+    ###Search MESH terms using find method
+    term_start_position = abstract_lower.find(mesh_entry)
+    while term_start_position < abstract_lenght and term_start_position != -1: 
+        if term_start_position !=  0: 
+            term_end_position = term_start_position + len(mesh_entry)
+            #check whether the word is the first one of the sentence
+            #if term_start_position == 0:                                           
+            #    left_char = ""
+            #else:
+            left_char = abstract_lower[term_start_position-1]
+   
+            #check whether the word is the last of the sentence                
+            if term_end_position < abstract_lenght:
+                right_char = abstract_lower[term_end_position]                   
+            else:
+                right_char = ""
+    
+            #check whether the term is part of larger word 
+            if right_char not in lts and left_char not in lts:
+                term_positions.append(Term(mesh_entry, term_start_position, 
+                                                    term_end_position, ui))
+            #else:
+            #    pass
+        
+        #else:
+        #    pass
+    
+        term_start_position = abstract_lower.find(mesh_entry,term_start_position+1)
+    
+    return term_positions
 
 
 def recognize_mesh_entries(mesh_entries, abstract):
@@ -56,46 +97,19 @@ def recognize_mesh_entries(mesh_entries, abstract):
     Recieve a list with tuples (mesh_term, ui) and an abstract(str)
     return a list o Terms, sorted by start_tem_position
     """
+    global abstract_lenght, abstract_lower
     abstract_lenght = len(abstract)
     abstract_lower = abstract.lower()
     founds = 0
     terms_find = []
-    #sentence = sentence_data[2]
-    for mesh_entry_ui in mesh_entries:
-        mesh_entry = mesh_entry_ui[0].lower()
-        ui = mesh_entry_ui[1]
-        ###Search MESH terms using find method
-        term_start_position = abstract_lower.find(mesh_entry)
-        while term_start_position < abstract_lenght and term_start_position != -1: 
-            if term_start_position !=  0: 
-                term_end_position = term_start_position + len(mesh_entry)
-                 #check whether the word is the first one of the sentence
-                if term_start_position == 0:                                           
-                    left_char = ""
-                else:
-                    left_char = abstract_lower[term_start_position-1]
-
-                #check whether the word is the last of the sentence                
-                if term_end_position < abstract_lenght:
-                    right_char = abstract_lower[term_end_position]
-                    #if the found term is not the last term in the sentence
-                    #verify whether there is another term
-                    
-                else:
-                    right_char = ""
-
-                #check whether the term is a 'subterm' 
-                if right_char not in lts and left_char not in lts:
-                    terms_find.append(Term(mesh_entry, term_start_position, 
-                                                  term_end_position, ui))
-                    founds +=1
-                else:
-                    pass
-    
-            else:
-                pass
-            term_start_position = abstract_lower.find(mesh_entry,term_start_position+1)
-
+    pool = multiprocessing.Pool()
+    time_i = time.time()
+    terms_find = pool.map_async(find_term, mesh_entries).get() 
+                                                #[abstract_lower]*len(mesh_entries),
+                                                #[abstract_lenght]*len(mesh_entries))).get()
+    terms_find = [term for terms in terms_find 
+                       for term in terms]# if term]
+    print "Terms recognition took (secs): ", time.time() - time_i
     #Filter 'subterms'
     filtered_terms = []            
     for term_1 in terms_find:
@@ -108,7 +122,6 @@ def recognize_mesh_entries(mesh_entries, abstract):
         if not is_subset: filtered_terms.append(term_1)
 
     terms = sorted(filtered_terms, key=lambda term: term.start)
-    print "\n\nFiltered terms: ", terms #for debugging
     print "Number of total and filtered found: ", founds, len(terms) #for debugging
     return terms
 

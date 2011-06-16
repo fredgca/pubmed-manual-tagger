@@ -2,6 +2,7 @@ import pygtk, gtk.glade
 import gtk
 import pre_processing
 import xml_tools, entrez
+import time #debugging
 #from multiprocessing import Process
 
 class PubMed_Tagger:
@@ -95,31 +96,25 @@ class PubMed_Tagger:
 
         #automaticaly recognize MESH terms and display the annotated abstract
         elif data and pre_process:
-            self.show_message("This can take a few seconds. Do not close the program")
+            self.show_message("This can take a few seconds. Do not close the program")           
             #get mesh terms from database
+            timei = time.time()
             mesh_entries = pre_processing.get_mesh_entries()
             if not mesh_entries:
                 self.show_message("Probably you don't have the MESH database in mesh.db file. Contact the developer for help")
                 return 0                
             else:
                 pass
-
+            print "Getting mesh entries from database took (secs): ", time.time() - timei
             abstract_text = xml_tools.get_abstract_text_from_etree(data)
             #recognize MESH terms automatically
             annotated_filename = "annotated_" + self.current_open_file
-            #using multiprocessing
-            #process = Process(target=pre_processing.create_annotated_abstract_xml,
-                              args = (raw_ncbi_xml, abstract_text, mesh_entries,
-                                       annotated_filename))
-            #process.start()
-            #process.join()
-            #serial code
+            self.current_open_file = annotated_filename
             pre_processing.create_annotated_abstract_xml(raw_ncbi_xml,
                                                           abstract_text, 
                                                           mesh_entries,
                                                           annotated_filename)
-            #load annotated xml
-            
+            #load annotated xml          
             data,tags = xml_tools.load_annotated_xml(annotated_filename)
             if not data:
                self.show_message("PubMed Tagger was not able to parse %s" %annotated_filename)
@@ -228,7 +223,6 @@ class PubMed_Tagger:
     def update_annotation_liststore(self, tags):
         self.annotation_liststore.clear()
         textbuffer = self._abstract_textview.get_buffer()
-        check_tags = 0
         for tag, bounds in tags.items():
             for bound in bounds:
                 term_start_iter = textbuffer.get_iter_at_mark(bound[0])
@@ -240,10 +234,6 @@ class PubMed_Tagger:
                 mesh = "MESH HEADING" #must be replace with a database query
                 annotation = "MESH Annotation" #must be replaced with a database query
                 self.annotation_liststore.append((term, start, end, mesh_number, mesh, annotation))
-
-                check_tags +=1
-
-        print "Tags in liststore: ", check_tags
 
           
     def on_annotation_erase_button_clicked(self, *args):

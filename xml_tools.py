@@ -141,7 +141,6 @@ def save_annotated_abstract(filename, textbuffer):
 
     while has_other_tag:
         tags = start.get_tags()
-        print tags        
         tag = tags[0].get_property("name").split("Annotation")
         tag_name = tag[0].strip()
         tag_attribute = tag[1].split("=")[1].strip().replace("\"", "")
