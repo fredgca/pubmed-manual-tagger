@@ -1,3 +1,21 @@
+#    Copyright 2011 Frederico G. C. Arnoldi <fgcarnoldi /at/ gmail /dot/ com>
+#
+#    This file is part of PubMed Manual Tagger.
+#
+#    PubMed Manual Tagger is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU Lesser General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    any later version.
+#
+#    PubMed Manual Tagger is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU Lesser General Public License for more details.
+#
+#    You should have received a copy of the GNU Lesser General Public License
+#    along with PubMed Tagger.  If not, see <http://www.gnu.org/licenses/>.
+
+
 import pygtk, gtk.glade
 import gtk
 import pre_processing
