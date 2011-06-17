@@ -3,6 +3,7 @@ import gtk
 import pre_processing
 import xml_tools, entrez
 import time #debugging
+from database import Database
 #from multiprocessing import Process
 
 class PubMed_Tagger:
@@ -99,7 +100,7 @@ class PubMed_Tagger:
             self.show_message("This can take a few seconds. Do not close the program")           
             #get mesh terms from database
             timei = time.time()
-            mesh_entries = pre_processing.get_mesh_entries()
+            mesh_entries = self.db.get_mesh_entries()
             if not mesh_entries:
                 self.show_message("Probably you don't have the MESH database in mesh.db file. Contact the developer for help")
                 return 0                
@@ -153,7 +154,7 @@ class PubMed_Tagger:
 
     def on_annotation_button_clicked(self, *args):
         attribute_name = self.get_active_text_in_combobox(self._tags_combo)
-        attribute_value = self._annotation_entry.get_text()
+        attribute_value = self._annotation_entry.get_text() #MESH number if TAG is MESH
         text = self._active_term_entry.get_text().strip()
         if not text:
             self.show_message("There is no selected term to tag")
@@ -163,11 +164,11 @@ class PubMed_Tagger:
             pygtk_tag = str(attribute_name + ' Annotation="' + attribute_value + '"')
             self.insert_tag(pygtk_tag, self._abstract_textview, self.active_term_bounds)
             x,y = self.active_term_bounds           
+            ui, heading, ann = self.db.get_mesh_descriptions(attribute_value)
             self.annotation_liststore.append([text, x.get_offset(), 
                                               y.get_offset(), 
                                               attribute_value,
-                                              "MESH HEADING*", "MESH Annotation*"])
-            #Term, start, end, mesh_number, mesh_heading, mesh_annotation
+                                              heading, ann])            
 
         else: 
             pygtk_tag = str(attribute_name + ' Annotation=""')
@@ -222,7 +223,9 @@ class PubMed_Tagger:
     ########### Functions for the Annotation Treeview #############
     def update_annotation_liststore(self, tags):
         self.annotation_liststore.clear()
-        textbuffer = self._abstract_textview.get_buffer()
+        textbuffer = self._abstract_textview.get_buffer() 
+        ts = time.time() #for debugging/optimization       
+        #TODO: Parallel this work
         for tag, bounds in tags.items():
             for bound in bounds:
                 term_start_iter = textbuffer.get_iter_at_mark(bound[0])
@@ -231,11 +234,16 @@ class PubMed_Tagger:
                 start = term_start_iter.get_offset()
                 end = term_end_iter.get_offset()
                 mesh_number = tag.split("=")[1].replace("\"", "")
-                mesh = "MESH HEADING" #must be replace with a database query
-                annotation = "MESH Annotation" #must be replaced with a database query
-                self.annotation_liststore.append((term, start, end, mesh_number, mesh, annotation))
+                try:
+                    ui, heading, ann = self.db.get_mesh_descriptions(mesh_number)
 
-          
+                except:
+                    ui, heading, ann = "", "",""
+
+                self.annotation_liststore.append((term, start, end, mesh_number, heading, ann))
+
+        print "Feeding Liststore took (secs): ", time.time()-ts
+  
     def on_annotation_erase_button_clicked(self, *args):
         model, selections = self._annotation_treeview.get_selection().get_selected_rows()
         iters = [model.get_iter(selection) for selection in selections]
@@ -474,7 +482,7 @@ class PubMed_Tagger:
         self._pmid_entry.set_text("21575226")#Type a valid PMID to download")
         self.load_tags()
         self.active_term_bounds = ()
-
+        self.db = Database()
 if __name__ == "__main__":              
     PubMed_Tagger()
     gtk.main()

@@ -20,7 +20,6 @@ import xml.etree.ElementTree as etree
 import multiprocessing
 import itertools
 from string import ascii_lowercase as lts    
-from pysqlite2 import dbapi2 as sqlite
 
 class Term:
     """
@@ -105,10 +104,8 @@ def recognize_mesh_entries(mesh_entries, abstract):
     pool = multiprocessing.Pool()
     time_i = time.time()
     terms_find = pool.map_async(find_term, mesh_entries).get() 
-                                                #[abstract_lower]*len(mesh_entries),
-                                                #[abstract_lenght]*len(mesh_entries))).get()
     terms_find = [term for terms in terms_find 
-                       for term in terms]# if term]
+                       for term in terms]
     print "Terms recognition took (secs): ", time.time() - time_i
     #Filter 'subterms'
     filtered_terms = []            
@@ -122,7 +119,7 @@ def recognize_mesh_entries(mesh_entries, abstract):
         if not is_subset: filtered_terms.append(term_1)
 
     terms = sorted(filtered_terms, key=lambda term: term.start)
-    print "Number of total and filtered found: ", founds, len(terms) #for debugging
+    print "Number of total and filtered found: ", founds, len(terms)
     return terms
 
 def abstract2xml(abstract, terms):
@@ -187,22 +184,12 @@ def abstract2xml(abstract, terms):
 
     return Abstract
 
+
 def create_annotated_abstract_xml(ncbi_xml, abstract, mesh_entries, annotated_filename):
     terms = recognize_mesh_entries(mesh_entries, "".join(abstract))
     xml_annotated_abstract = abstract2xml(abstract, terms)
     xml_tools.replace_etree_element(ncbi_xml.findall(".//Abstract")[0], 
                                     xml_annotated_abstract)
     ncbi_xml.write(annotated_filename)
-    
 
-def get_mesh_entries():
-    try:
-        db_connection = sqlite.connect("mesh.db")
-    except: 
-        return 0
-    cursor = db_connection.cursor()
-    cursor.execute("PRAGMA foreign_keys = ON;")
-    mesh_entries = list(cursor.execute("select * from mesh_entries_table"))
-    mesh_entries = [(x[0].lower(), x[1]) for x in mesh_entries]
-    return mesh_entries
 
