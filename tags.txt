@@ -1,10 +1,10 @@
 MESH, yellow
 GO, yellow
 UniProt, lightblue
-UniGene, lightblue
+Gene, lightblue
 PDB, lightblue
 PubChem, lightblue
 Organism, green
 Tissue, green
 Cell, green
-MESH_automatic, gray
+Molecular_Role, orange
