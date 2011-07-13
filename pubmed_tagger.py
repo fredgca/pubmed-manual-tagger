@@ -18,11 +18,12 @@
 
 import pygtk, gtk.glade
 import gtk
-import pre_processing
-import xml_tools, entrez
-import time #debugging
+import xml_tools, entrez, tools
+from term import Term, Term_Hunter
 from database import Database
-#from multiprocessing import Process
+##for debugging
+from xml.etree.ElementTree import dump #debuging
+import time#, os,sys #debuging
 
 class PubMed_Tagger:
     def get_glade_widgets(self):
@@ -111,37 +112,34 @@ class PubMed_Tagger:
 
         #just display the raw abstract, withou any preprocessing
         if data and not pre_process:
+            self._clear_interface() 
             self._update_interface(data)
 
         #automaticaly recognize MESH terms and display the annotated abstract
         elif data and pre_process:
             self.show_message("This can take a few seconds. Do not close the program")           
             #get mesh terms from database
-            timei = time.time()
-            mesh_entries = self.db.get_mesh_entries()
-            if not mesh_entries:
-                self.show_message("Probably you don't have the MESH database in mesh.db file. Contact the developer for help")
-                return 0                
-            else:
-                pass
-            print "Getting mesh entries from database took (secs): ", time.time() - timei
             abstract_text = xml_tools.get_abstract_text_from_etree(data)
+            abstract_text = tools.translate_greek2latin(abstract_text)
+
             #recognize MESH terms automatically
             annotated_filename = "annotated_" + self.current_open_file
             self.current_open_file = annotated_filename
-            pre_processing.create_annotated_abstract_xml(raw_ncbi_xml,
-                                                          abstract_text, 
-                                                          mesh_entries,
-                                                          annotated_filename)
+            self.create_annotated_abstract_xml(raw_ncbi_xml,
+                                               abstract_text, 
+                                               annotated_filename)
             #load annotated xml          
             data,tags = xml_tools.load_annotated_xml(annotated_filename)
+
             if not data:
                self.show_message("PubMed Tagger was not able to parse %s" %annotated_filename)
                return 0
- 
+
+            self._clear_interface() 
             self._update_interface(data, textbuffer=True)       
             self.tag_text(tags)
             self.update_annotation_liststore(tags)
+
 
 
     def on_untag_button_clicked(self, *args):
@@ -182,9 +180,9 @@ class PubMed_Tagger:
             pygtk_tag = str(attribute_name + ' Annotation="' + attribute_value + '"')
             self.insert_tag(pygtk_tag, self._abstract_textview, self.active_term_bounds)
             x,y = self.active_term_bounds           
-            ui, heading, ann = self.db.get_mesh_descriptions(attribute_value)
+            Id, heading, ann = self.db.get_mesh_descriptions(attribute_value)
             self.annotation_liststore.append([text, x.get_offset(), 
-                                              y.get_offset(), 
+                                              y.get_offset(),attribute_name, 
                                               attribute_value,
                                               heading, ann])            
 
@@ -242,25 +240,39 @@ class PubMed_Tagger:
     def update_annotation_liststore(self, tags):
         self.annotation_liststore.clear()
         textbuffer = self._abstract_textview.get_buffer() 
-        ts = time.time() #for debugging/optimization       
         #TODO: Parallel this work
+        descriptions = {"MESH":{},"Cell":{}, "Gene":{}, "Molecular_Role":{}} 
+        #these loops feed the description dictionary
+        #each key, recieve a dictionary as value
+        #this values is like {"id":[term1,term2]}
         for tag, bounds in tags.items():
             for bound in bounds:
+                #getting terms informations
                 term_start_iter = textbuffer.get_iter_at_mark(bound[0])
                 term_end_iter = textbuffer.get_iter_at_mark(bound[1])
-                term = textbuffer.get_text(term_start_iter,term_end_iter)
+                text = textbuffer.get_text(term_start_iter,term_end_iter)
                 start = term_start_iter.get_offset()
                 end = term_end_iter.get_offset()
-                mesh_number = tag.split("=")[1].replace("\"", "")
-                try:
-                    ui, heading, ann = self.db.get_mesh_descriptions(mesh_number)
+                term_ids = tag.split("=")[1].replace("\"", "").split("|")
+                tag_name = tag.split("Annotation")[0].strip()
+                for term_id in term_ids: 
+                    if term_id in descriptions[tag_name].keys():
+                        descriptions[tag_name][term_id].append(Term(text,start,end,term_id,tag_name))
+                    else:
+                        descriptions[tag_name][term_id] = [Term(text,start,end,term_id,tag_name)]
 
-                except:
-                    ui, heading, ann = "", "",""
+        #Given the descriptions dictionary, get the terms annotations 
+        for tag, terms_dict in descriptions.items():
+            annotated_terms = self.db.get_terms_description(tag, terms_dict)            
+            for term in annotated_terms.values():
+                for term_position in term:
+                    data = (term_position.term, term_position.start, 
+                            term_position.end, term_position.tag, 
+                            term_position.id, term_position.main_concept, 
+                            term_position.description)
 
-                self.annotation_liststore.append((term, start, end, mesh_number, heading, ann))
+                    self.annotation_liststore.append(data)
 
-        print "Feeding Liststore took (secs): ", time.time()-ts
   
     def on_annotation_erase_button_clicked(self, *args):
         model, selections = self._annotation_treeview.get_selection().get_selected_rows()
@@ -269,13 +281,14 @@ class PubMed_Tagger:
         for path in iters:
             tags.append((model.get_value(path, 1),
                          model.get_value(path, 2),
-                         model.get_value(path, 3)))
+                         model.get_value(path, 3),
+                         model.get_value(path, 4)))
 
             model.remove(path)
 
         textbuffer = self._abstract_textview.get_buffer()
         for tag in tags:
-            tag_name = 'MESH Annotation="%s"' % tag[2]
+            tag_name = '%s Annotation="%s"' % (str(tag[2]),str(tag[3]))
             start =  textbuffer.get_iter_at_offset(tag[0])
             end = textbuffer.get_iter_at_offset(tag[1])
             textbuffer.remove_tag_by_name(tag_name, start, end)
@@ -356,7 +369,8 @@ class PubMed_Tagger:
                 end = textbuffer.get_iter_at_mark(bounds[1])
                 self.insert_tag(tag, self._abstract_textview, (start,end))
                 tags_added +=1
-        print "Tags added (textbuffer): ", tags_added  #for debugging
+
+        print "Number of tags added (textbuffer): ", tags_added  #for debugging
         
     #**Loading tags**#       
     def load_tags(self, *args):
@@ -417,6 +431,65 @@ class PubMed_Tagger:
         self._year_label.set_text("")
 
 
+    def create_annotated_abstract_xml(self,ncbi_xml, abstract, annotated_filename):
+        """Recieves:
+           - Abstract from Pubmed in xml format (ncbi_xml),
+           - The abstract itself as string (abstract), - TODO: Check is str
+           - A name for the file where the annotated xml should be saved.    
+           Do:
+           - Recognize terms in the abstract and save it as a xml in pubmed format
+        """  
+        timei = time.time() #for code optimization 
+        found_terms = []
+        #recognizing Cell_Terms
+        cell_terms = self.db.get_cell_entries()
+        if cell_terms:
+            cell_term_hunter = Term_Hunter(abstract, "Cell")        
+            found_terms += cell_term_hunter.recognize_terms(cell_terms)
+        print "Cells: ", time.time() - timei
+        #Recognizing Molecular Role Terms
+        molecular_role_terms = self.db.get_molecular_role_entries()
+        if molecular_role_terms:
+            molecular_role_term_hunter = Term_Hunter(abstract, "Molecular_Role")        
+            found_terms += molecular_role_term_hunter.recognize_terms(molecular_role_terms)
+        print "Molecular role: ", time.time() - timei
+        #recognizing Genes_Terms
+        gene_terms = self.db.get_gene_entries()#first_rowid, last_rowid)
+        if gene_terms:
+            gene_term_hunter = Term_Hunter(abstract, "Gene") 
+            found_terms += gene_term_hunter.recognize_terms(gene_terms)
+        print "Genes: ", time.time() - timei
+        """
+        gene_synonyms_number = 347940 
+        first_rowid = 1
+        last_rowid = 100000
+        while last_rowid <= gene_synonyms_number:           
+            partial_gene_terms = self.db.get_gene_entries(first_rowid, last_rowid)
+            found_terms += gene_term_hunter.recognize_terms(partial_gene_terms)
+            del(partial_gene_terms)#releasing memory
+            gc.collect()
+            first_rowid = last_rowid +1
+            if last_rowid < gene_synonyms_number + 100000:
+                last_rowid  += 100000
+            else:
+                last_rowid = gene_synonyms_number
+        """
+        #recognizing MESH_Terms
+        mesh_terms = self.db.get_mesh_entries()            
+        if mesh_terms:
+            mesh_term_hunter = Term_Hunter(abstract, "MESH")
+            found_terms += mesh_term_hunter.recognize_terms(mesh_terms)
+        print "MESH: ", time.time() - timei
+        filtered_found_terms = mesh_term_hunter.filter_terms(found_terms)        
+        print "Getting and recognizing terms all databases took (secs): ", time.time() - timei
+
+        xml_annotated_abstract = xml_tools.abstract2xml(abstract, filtered_found_terms)        
+        xml_tools.replace_etree_element(ncbi_xml.findall(".//Abstract")[0], 
+                                        xml_annotated_abstract)
+        #print "The resulting XML: \n", dump(xml_annotated_abstract)        
+        ncbi_xml.write(annotated_filename)
+        print "Finished: ", time.time() - timei
+
     ######## Constructor ########
     def __init__ (self):
         """Pubmed Tagger is an app to make text annotation easier"""
@@ -449,11 +522,9 @@ class PubMed_Tagger:
                                        gtk.gdk.color_parse("yellow"))
         #Setting treeview and liststore
         self._annotation_treeview.get_selection().set_mode(gtk.SELECTION_MULTIPLE)
-        self.annotation_liststore = gtk.ListStore(str,int,int,str, str,str)
+        self.annotation_liststore = gtk.ListStore(str,int,int,str,str, str,str)
         self.annotation_liststore.set_sort_func(1, self._compare_tags)
         self.annotation_liststore.set_sort_column_id(1,gtk.SORT_ASCENDING)
-        #self.annotation_liststore.append(["Example of Term", 0, 0, "A MESH Number",
-        #                                  "A MESH Heading", "A MESH Annotation"])
         self._annotation_treeview.set_model(self.annotation_liststore)
         ##Creating treeview columns, cellrenderer and packing them
         self.term_column = gtk.TreeViewColumn('Term')
@@ -471,36 +542,44 @@ class PubMed_Tagger:
         self.end_column.pack_start(self.end_cell, True)
         self.end_column.set_attributes(self.end_cell,markup=2)
 
-        self.mesh_number_column = gtk.TreeViewColumn('MESH Number')
-        self.mesh_number_cell = gtk.CellRendererText()
-        self.mesh_number_column.pack_start(self.mesh_number_cell, True)
-        self.mesh_number_column.set_attributes(self.mesh_number_cell,markup=3)
+        self.tag_column = gtk.TreeViewColumn('Tag')
+        self.tag_cell = gtk.CellRendererText()
+        self.tag_column.pack_start(self.tag_cell, True)
+        self.tag_column.set_attributes(self.tag_cell,markup=3)
 
-        self.mesh_heading_column = gtk.TreeViewColumn('MESH Heading')
-        self.mesh_heading_cell = gtk.CellRendererText()
-        self.mesh_heading_column.pack_start(self.mesh_heading_cell, True)
-        self.mesh_heading_column.set_attributes(self.mesh_heading_cell,markup=4)
+        self.term_id_column = gtk.TreeViewColumn('Term ID')
+        self.term_id_cell = gtk.CellRendererText()
+        self.term_id_column.pack_start(self.term_id_cell, True)
+        self.term_id_column.set_attributes(self.term_id_cell,markup=4)
 
-        self.mesh_annotation_column = gtk.TreeViewColumn('Annotation')
-        self.mesh_annotation_cell = gtk.CellRendererText()
-        self.mesh_annotation_column.pack_start(self.mesh_annotation_cell, True)
-        self.mesh_annotation_column.set_attributes(self.mesh_annotation_cell,markup=5)
+        self.heading_column = gtk.TreeViewColumn('Heading')
+        self.heading_cell = gtk.CellRendererText()
+        self.heading_column.pack_start(self.heading_cell, True)
+        self.heading_column.set_attributes(self.heading_cell,markup=5)
+
+        self.annotation_column = gtk.TreeViewColumn('Annotation')
+        self.annotation_cell = gtk.CellRendererText()
+        self.annotation_column.pack_start(self.annotation_cell, True)
+        self.annotation_column.set_attributes(self.annotation_cell,markup=6)
 
         ##Appending treeview columns
         self._annotation_treeview.append_column(self.term_column)
         self._annotation_treeview.append_column(self.start_column)
         self._annotation_treeview.append_column(self.end_column)
-        self._annotation_treeview.append_column(self.mesh_number_column)
-        self._annotation_treeview.append_column(self.mesh_heading_column)
-        self._annotation_treeview.append_column(self.mesh_annotation_column)
+        self._annotation_treeview.append_column(self.tag_column)
+        self._annotation_treeview.append_column(self.term_id_column)
+        self._annotation_treeview.append_column(self.heading_column)
+        self._annotation_treeview.append_column(self.annotation_column)
 
         self.current_open_file = ""
         self.tag_colors = {}
         self._clear_interface()
-        self._pmid_entry.set_text("21575226")#Type a valid PMID to download")
+        self._pmid_entry.set_text("21720558")#Type a valid PMID to download")
         self.load_tags()
         self.active_term_bounds = ()
         self.db = Database()
+        
+
 if __name__ == "__main__":              
     PubMed_Tagger()
     gtk.main()

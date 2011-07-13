@@ -17,6 +17,7 @@
 
 import gtk
 import xml.etree.ElementTree as etree
+from term import Term
 
 def get_data_from_ncbi_xml(filename):
     """
@@ -43,12 +44,12 @@ def get_abstract_text_from_etree(data):
     Given a dictionary like that retured by get_data_from_ncbi_xml,
     return a string with abstract text
     """
-    abstract = ""
+    abstract = unicode("")
     for abstract_section in data["article_abstract"]:
         if len(abstract) == 0:
-            abstract += abstract_section.text
+            abstract += unicode(abstract_section.text)
         else:
-            abstract += " " + abstract_section.text
+            abstract += " " + unicode(abstract_section.text)
 
     return abstract
 
@@ -91,7 +92,10 @@ def load_annotated_xml(xml_filename):
                 textbuffer.insert(end_iter,text)
                 new_end_iter = textbuffer.get_end_iter()
                 textmark_after = textbuffer.create_mark(None, new_end_iter, True)       
-                if pygtk_tag_name.startswith("MESH"):
+                if pygtk_tag_name.startswith("MESH") or \
+                   pygtk_tag_name.startswith("Cell") or \
+                   pygtk_tag_name.startswith("Molecular_Role") or \
+                   pygtk_tag_name.startswith("Gene"):
                     if pygtk_tag_name in tags.keys():
                         tags[pygtk_tag_name].append((textmark_before, textmark_after))
                     else:
@@ -165,4 +169,70 @@ def save_annotated_abstract(filename, textbuffer):
     abstract_xml = etree.parse(filename)
     replace_etree_element(abstract_xml.findall(".//Abstract")[0], Abstract)
     abstract_xml.write(filename)
+
+
+def abstract2xml(abstract, terms):
+    """
+    Given an abstract(str) and a list of Terms (class Term)
+    Return an elementtree 'Abstract', with each term as an elementtree 
+    tagged with 'MESH' and attribute MESH unique identifier
+    TODO: this method is not storing all annotations when multiples are 
+    added to the same term
+    """
+    Abstract = etree.Element("Abstract")
+    AbstractText = etree.SubElement(Abstract, "AbstractText")
+    AbstractText.text = abstract[0:int(terms[0].start)]
+    #AbstractText.tail = abstract[int(terms[-1].end):]
+
+    terms_elements = []
+    for term in terms:
+        #Get next and previous term.
+        if terms.index(term) != len(terms)-1: 
+            next_term = terms[terms.index(term)+1]
+        else:
+            next_term = Term("None", float("+inf"), float("+inf"), 0, "None")
+
+        if terms.index(term) != 0:
+            previous_term = terms[terms.index(term)-1]
+        else:
+            previous_term = Term("None", float("-inf"), float("-inf"), 0, "None")
+
+        #TODO If three terms overlaps
+        #if adjacent terms are not overlapping
+        if next_term.start > term.end and term.start > previous_term.end:
+            #print "if", terms.index(term), len(terms), next_term.start, term.end, term.term, term.id,#for debugging
+            terms_elements.append(etree.SubElement(AbstractText, term.tag,
+                                        attrib = {"Annotation": str(term.id)}))
+
+            terms_elements[-1].text = abstract[term.start: term.end]
+            if next_term.term != "None":
+                terms_elements[-1].tail = abstract[term.end: next_term.start]
+            else:
+                terms_elements[-1].tail = abstract[term.end:]
+
+            #print terms_elements[-1].text, terms_elements[-1].tail #for debugging
+
+        #if the current term overlaps the precedent
+        elif term.start < previous_term.end and term.end < next_term.start:
+            #print "elif", terms.index(term), len(terms), term.start, previous_term.end, term.term, term.id, #for debugging
+            annotation = "%s|%s" %(term.id, next_term.id)
+            terms_elements.append(etree.SubElement(AbstractText, term.tag,
+                                        attrib = {"Annotation": annotation}))
+            terms_elements[-1].text = abstract[previous_term.start: term.end]
+            if next_term.term != "None":
+                terms_elements[-1].tail = abstract[term.end:next_term.start]
+            else:
+                terms_elements[-1].tail = abstract[term.end:]
+
+            #print terms_elements[-1].text, terms_elements[-1].tail  #for debugging
+
+        #if the current term overlaps the next
+        elif term.start > previous_term.end and term.end > next_term.start:
+            #print "******elif pass*****", term.term, next_term.term #for debugging
+            pass
+
+    return Abstract
+
+
+
 
