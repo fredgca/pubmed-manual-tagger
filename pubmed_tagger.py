@@ -476,14 +476,19 @@ class PubMed_Tagger:
         """
         #recognizing MESH_Terms
         mesh_terms = self.db.get_mesh_entries()            
-        if mesh_terms:
-            mesh_term_hunter = Term_Hunter(abstract, "MESH")
-            found_terms += mesh_term_hunter.recognize_terms(mesh_terms)
-        print "MESH: ", time.time() - timei
-        filtered_found_terms = mesh_term_hunter.filter_terms(found_terms)        
-        print "Getting and recognizing terms all databases took (secs): ", time.time() - timei
+        mesh_term_hunter = Term_Hunter(abstract, "MESH")
 
-        xml_annotated_abstract = xml_tools.abstract2xml(abstract, filtered_found_terms)        
+        if mesh_terms:
+            found_terms += mesh_term_hunter.recognize_terms(mesh_terms)
+
+        filtered_found_terms = mesh_term_hunter.filter_terms(found_terms)        
+        print "MESH: ", time.time() - timei
+        print "Getting and recognizing terms all databases took (secs): ", time.time() - timei
+        if filtered_found_terms:
+            xml_annotated_abstract = xml_tools.abstract2xml(abstract, filtered_found_terms)        
+        else: 
+           self.show_message("No terms recognized. Check the database and you input")
+
         xml_tools.replace_etree_element(ncbi_xml.findall(".//Abstract")[0], 
                                         xml_annotated_abstract)
         #print "The resulting XML: \n", dump(xml_annotated_abstract)        
