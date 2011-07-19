@@ -13,7 +13,7 @@
 #    GNU Lesser General Public License for more details.
 #
 #    You should have received a copy of the GNU Lesser General Public License
-#    along with PubMed Tagger.  If not, see <http://www.gnu.org/licenses/>.
+#    along with PubMed Manual Tagger.  If not, see <http://www.gnu.org/licenses/>.
 
 
 import pygtk, gtk.glade
@@ -36,7 +36,7 @@ class PubMed_Tagger:
                         "pmid_button","annotate_button", "untag_button",       #main_window
                         "reload_tags_button", "tags_combo",                    #main_window
                         "pmid_label", "journal_label", "year_label",           #main_window
-                        "save_button", "open_button",                          #main_window
+                        "save_button", "open_button", "parallel_checkbutton",  #main_window
                         "annotation_window_button",                            #main_window
                         "filechooser_window", "filechooser_ok_button",         #filechooser_window
                         "filechooser_cancel_button",                           #filechooser_window
@@ -99,6 +99,7 @@ class PubMed_Tagger:
         #TODO: this method could be better organized
         pmid = self._pmid_entry.get_text()
         pre_process = self._preprocess_checkbutton.get_active()
+        parallel = self._parallel_checkbutton.get_active()
         #Check if the input has a valid PMID
         try:
             int(pmid)
@@ -127,7 +128,8 @@ class PubMed_Tagger:
             self.current_open_file = annotated_filename
             self.create_annotated_abstract_xml(raw_ncbi_xml,
                                                abstract_text, 
-                                               annotated_filename)
+                                               annotated_filename,
+                                               parallel)
             #load annotated xml          
             data,tags = xml_tools.load_annotated_xml(annotated_filename)
 
@@ -139,7 +141,6 @@ class PubMed_Tagger:
             self._update_interface(data, textbuffer=True)       
             self.tag_text(tags)
             self.update_annotation_liststore(tags)
-
 
 
     def on_untag_button_clicked(self, *args):
@@ -241,7 +242,8 @@ class PubMed_Tagger:
         self.annotation_liststore.clear()
         textbuffer = self._abstract_textview.get_buffer() 
         #TODO: Parallel this work
-        descriptions = {"MESH":{},"Cell":{}, "Gene":{}, "Molecular_Role":{}} 
+        descriptions = {"MESH":{},"Cell":{}, "Gene":{}, "Molecular_Role":{},
+                        "Mtb_Gene": {}} 
         #these loops feed the description dictionary
         #each key, recieve a dictionary as value
         #this values is like {"id":[term1,term2]}
@@ -264,14 +266,17 @@ class PubMed_Tagger:
         #Given the descriptions dictionary, get the terms annotations 
         for tag, terms_dict in descriptions.items():
             annotated_terms = self.db.get_terms_description(tag, terms_dict)            
-            for term in annotated_terms.values():
-                for term_position in term:
-                    data = (term_position.term, term_position.start, 
-                            term_position.end, term_position.tag, 
-                            term_position.id, term_position.main_concept, 
-                            term_position.description)
+            if not annotated_terms:
+                pass
+            else:
+                for term in annotated_terms.values():
+                    for term_position in term:
+                        data = (term_position.term, term_position.start, 
+                                term_position.end, term_position.tag, 
+                                term_position.id, term_position.main_concept, 
+                                term_position.description)
 
-                    self.annotation_liststore.append(data)
+                        self.annotation_liststore.append(data)
 
   
     def on_annotation_erase_button_clicked(self, *args):
@@ -431,7 +436,8 @@ class PubMed_Tagger:
         self._year_label.set_text("")
 
 
-    def create_annotated_abstract_xml(self,ncbi_xml, abstract, annotated_filename):
+    def create_annotated_abstract_xml(self,ncbi_xml, abstract, 
+                                      annotated_filename, parallel):
         """Recieves:
            - Abstract from Pubmed in xml format (ncbi_xml),
            - The abstract itself as string (abstract), - TODO: Check is str
@@ -445,19 +451,27 @@ class PubMed_Tagger:
         cell_terms = self.db.get_cell_entries()
         if cell_terms:
             cell_term_hunter = Term_Hunter(abstract, "Cell")        
-            found_terms += cell_term_hunter.recognize_terms(cell_terms)
+            found_terms += cell_term_hunter.recognize_terms(cell_terms, parallel)
         print "Cells: ", time.time() - timei
         #Recognizing Molecular Role Terms
         molecular_role_terms = self.db.get_molecular_role_entries()
         if molecular_role_terms:
             molecular_role_term_hunter = Term_Hunter(abstract, "Molecular_Role")        
-            found_terms += molecular_role_term_hunter.recognize_terms(molecular_role_terms)
+            found_terms += molecular_role_term_hunter.recognize_terms(molecular_role_terms,\
+                                                                      parallel)
         print "Molecular role: ", time.time() - timei
+        #Recognizing Mtb Gene Terms
+        mtb_gene_terms = self.db.get_mtb_gene_entries()
+        if mtb_gene_terms:
+            mtb_gene_term_hunter = Term_Hunter(abstract, "Mtb_Gene")        
+            found_terms += mtb_gene_term_hunter.recognize_terms(mtb_gene_terms,\
+                                                                parallel)
+        print "Mtb gene: ", time.time() - timei
         #recognizing Genes_Terms
         gene_terms = self.db.get_gene_entries()#first_rowid, last_rowid)
         if gene_terms:
             gene_term_hunter = Term_Hunter(abstract, "Gene") 
-            found_terms += gene_term_hunter.recognize_terms(gene_terms)
+            found_terms += gene_term_hunter.recognize_terms(gene_terms, parallel)
         print "Genes: ", time.time() - timei
         """
         gene_synonyms_number = 347940 
@@ -477,12 +491,11 @@ class PubMed_Tagger:
         #recognizing MESH_Terms
         mesh_terms = self.db.get_mesh_entries()            
         mesh_term_hunter = Term_Hunter(abstract, "MESH")
-
         if mesh_terms:
-            found_terms += mesh_term_hunter.recognize_terms(mesh_terms)
+            found_terms += mesh_term_hunter.recognize_terms(mesh_terms, parallel)
 
-        filtered_found_terms = mesh_term_hunter.filter_terms(found_terms)        
         print "MESH: ", time.time() - timei
+        filtered_found_terms = mesh_term_hunter.filter_terms2(found_terms)        
         print "Getting and recognizing terms all databases took (secs): ", time.time() - timei
         if filtered_found_terms:
             xml_annotated_abstract = xml_tools.abstract2xml(abstract, filtered_found_terms)        

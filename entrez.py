@@ -13,7 +13,7 @@
 #    GNU Lesser General Public License for more details.
 #
 #    You should have received a copy of the GNU Lesser General Public License
-#    along with PubMed Tagger.  If not, see <http://www.gnu.org/licenses/>.
+#    along with PubMed Manual Tagger.  If not, see <http://www.gnu.org/licenses/>.
 
 import urllib2
 import xml.etree.ElementTree as etree
@@ -23,11 +23,11 @@ def get_abstract_from_ncbi(pmid, output):
     Given a PMID, an output_filename, download the abstract from NCBI
     database, save and return it
     """
-    query = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=%s&retmode=xml&tool=pubmed-manual-tagger_in_development" %pmid
-    result = urllib2.urlopen(query).read()        
-    output_file = open(output, "w")
-    output_file.write(result)
-    output_file.close()
+    #query = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=%s&retmode=xml&tool=pubmed-manual-tagger_in_development" %pmid
+    #result = urllib2.urlopen(query).read()        
+    #output_file = open(output, "w")
+    #output_file.write(result)
+    #output_file.close()
     ncbi_xml = etree.parse(output)
     return ncbi_xml
 

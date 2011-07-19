@@ -13,7 +13,7 @@
 #    GNU Lesser General Public License for more details.
 #
 #    You should have received a copy of the GNU Lesser General Public License
-#    along with PubMed Tagger.  If not, see <http://www.gnu.org/licenses/>.
+#    along with PubMed Manual Tagger.  If not, see <http://www.gnu.org/licenses/>.
 
 import gtk
 import xml.etree.ElementTree as etree
@@ -95,6 +95,7 @@ def load_annotated_xml(xml_filename):
                 if pygtk_tag_name.startswith("MESH") or \
                    pygtk_tag_name.startswith("Cell") or \
                    pygtk_tag_name.startswith("Molecular_Role") or \
+                   pygtk_tag_name.startswith("Mtb_Gene") or \
                    pygtk_tag_name.startswith("Gene"):
                     if pygtk_tag_name in tags.keys():
                         tags[pygtk_tag_name].append((textmark_before, textmark_after))

@@ -374,6 +374,7 @@
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
                                 <property name="use_action_appearance">False</property>
+                                <property name="active">True</property>
                                 <property name="draw_indicator">True</property>
                               </widget>
                               <packing>
@@ -383,7 +384,19 @@
                               </packing>
                             </child>
                             <child>
-                              <placeholder/>
+                              <widget class="GtkCheckButton" id="parallel_checkbutton">
+                                <property name="label" translatable="yes">Parallel</property>
+                                <property name="visible">True</property>
+                                <property name="can_focus">True</property>
+                                <property name="receives_default">False</property>
+                                <property name="use_action_appearance">False</property>
+                                <property name="draw_indicator">True</property>
+                              </widget>
+                              <packing>
+                                <property name="expand">True</property>
+                                <property name="fill">True</property>
+                                <property name="position">1</property>
+                              </packing>
                             </child>
                           </widget>
                           <packing>
