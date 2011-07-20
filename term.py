@@ -115,21 +115,12 @@ def find_terms(terms):
                 else:
                     right_char = "xx"
         
-            if right_char[0] not in right_lts and left_char not in left_lts:
-                if right_char == "es":
-                    term_positions.append(Term(entry, term_start_position, 
-                                               term_end_position+2, Id, local_tag))
+            if right_char[0] not in left_lts and left_char not in left_lts:
+                term_positions.append(Term(entry, term_start_position, 
+                                           term_end_position, Id, local_tag))
 
-                elif right_char == "s ":
-                    term_positions.append(Term(entry, term_start_position, 
-                                               term_end_position+1, Id, local_tag))
-
-                elif right_char[0] == " ":
-                    term_positions.append(Term(entry, term_start_position, 
-                                               term_end_position, Id, local_tag))
-
-                else:
-                    pass
+            else:
+                pass
 
             term_start_position = find(abstract_lower, entry, 
                                        term_start_position+1)
