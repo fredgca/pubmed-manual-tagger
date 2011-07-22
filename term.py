@@ -16,11 +16,12 @@
 #    along with PubMed Manual Tagger.  If not, see <http://www.gnu.org/licenses/>.
 
 import multiprocessing 
-from string import find, lower, ascii_lowercase as left_lts    
+from string import find, lower, digits, ascii_lowercase as lts    
 #import time,sys,os,gc #debugging
 
 common_words = ("was", "what", "with", "where", "when", "can", "and", "its",
-                "this", "will", "had", "have", "age", "end", "key", "act")
+                "this", "will", "had", "have", "age", "end", "key", "act", "his",
+                "her", "large", "per", "step", "aid", "add", "top", "who")
 
 tag_priorities = {"Cell":5,
                   "Molecular_Role":4,
@@ -80,7 +81,7 @@ def find_terms(terms):
     return a list of terms found in the global variable abstract lower
     """
     #print "\nfind_terms", tag, terms[:10]
-    right_lts = left_lts.replace("s", "").replace("e", "")
+    lts_digits = lts + digits
     local_tag =  tag
     local_abstract_lenght = abstract_lenght
     local_abstract_lower = abstract_lower + "  " # the " " is to avoid IndexError
@@ -91,7 +92,7 @@ def find_terms(terms):
         if entry_length < 2:
             continue    
         ###Search terms using find method
-        right_char, left_char = "  "," "
+        right_char, left_char = " "," "
         term_start_position = find(abstract_lower, entry)
         term_end_position = term_start_position + entry_length
         while term_start_position < local_abstract_lenght and \
@@ -99,23 +100,21 @@ def find_terms(terms):
             if term_start_position !=  0: 
                 term_end_position = term_start_position + entry_length
                 left_char = abstract_lower[term_start_position-1]           
-                if term_end_position+1 < local_abstract_lenght:
+                if term_end_position < local_abstract_lenght:
                     #for checking whether the word is the last of the sentence                
-                    right_char = abstract_lower[term_end_position] + \
-                                 abstract_lower[term_end_position+1]                                      
+                    right_char = abstract_lower[term_end_position]
                 else:
-                    right_char = "xx"
+                    right_char = " "
             
             else:
                 if term_end_position < local_abstract_lenght:
                     #for checking whether the word is the last of the sentence                
-                    right_char = abstract_lower[term_end_position] + \
-                                 abstract_lower[term_end_position+1]                   
+                    right_char = abstract_lower[term_end_position]
                     left_char = " "
                 else:
-                    right_char = "xx"
+                    right_char = " "
         
-            if right_char[0] not in left_lts and left_char not in left_lts:
+            if right_char not in lts_digits and left_char not in lts_digits:
                 term_positions.append(Term(entry, term_start_position, 
                                            term_end_position, Id, local_tag))
 

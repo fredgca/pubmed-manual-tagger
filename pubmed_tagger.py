@@ -139,6 +139,7 @@ class PubMed_Tagger:
 
             self._clear_interface() 
             self._update_interface(data, textbuffer=True)       
+            print tags.keys()
             self.tag_text(tags)
             self.update_annotation_liststore(tags)
 
@@ -331,6 +332,7 @@ class PubMed_Tagger:
         """
         textbuffer = textview.get_buffer()
         tagtable = textbuffer.get_tag_table()
+        #print tag, bounds[0].get_offset()
         if tagtable.lookup(tag):           
             textbuffer.apply_tag_by_name(tag, bounds[0], bounds[1])       
         else:
@@ -339,7 +341,10 @@ class PubMed_Tagger:
                 tag_color = self.tag_colors[xml_tag_name]
                 textbuffer.create_tag(tag, background =tag_color)
                 textbuffer.apply_tag_by_name(tag, bounds[0], bounds[1])
-  
+            else:          
+                textbuffer.create_tag(tag, background = "brown")
+                textbuffer.apply_tag_by_name(tag, bounds[0], bounds[1])
+
     def write_tag_on_textbuffer(self, textbuffer, textMark, opening_tag):
         """
         Check the existance of a TextTag in the given textbuffer at given textMark
