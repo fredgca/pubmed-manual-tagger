@@ -1,0 +1,4 @@
+**Pubmed Manual Tagger** is a simple graphical editor/tagger for Pubmed abstracts that uses a dictionary-like approach. It makes easier the creation of personalised annotated text corpora for text-mining. It allows user to download abstracts from [PubMed](http://www.ncbi.nlm.nih.gov/) database, automatically recognise most terms, add and remove other annotations, and save it as a xml for future use in text-mining applications. Please, contact me if you want at fgcarnoldi /at/ gmaill / dot com
+
+
+![http://wiki.pubmed-manual-tagger.googlecode.com/hg/pubmed_manual_tagger_v05.png](http://wiki.pubmed-manual-tagger.googlecode.com/hg/pubmed_manual_tagger_v05.png)
